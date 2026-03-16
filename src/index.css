@@ -1,96 +1,68 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* GSCIP Color Tokens */
+    --color-bg-app: #0D1117;
+    --color-bg-sidebar: #0F1F3D;
+    --color-bg-card: #1A2744;
+    --color-bg-surface: #1E2D4F;
+    --color-border: #2A3F6F;
+    --color-text-primary: #F0F4FF;
+    --color-text-secondary: #8899BB;
+    --color-text-muted: #4A5880;
+    --color-cobalt: #1565C0;
+    --color-azure: #1E88E5;
+    --color-sky: #BBDEFB;
+    --color-risk-high: #C62828;
+    --color-risk-med: #F57C00;
+    --color-risk-low: #2E7D32;
+    --color-risk-none: #546E7A;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    /* Spacing */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+    --space-8: 64px;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    /* Shadcn overrides */
+    --background: 216 28% 7%;
+    --foreground: 224 100% 97%;
+    --card: 218 42% 18%;
+    --card-foreground: 224 100% 97%;
+    --popover: 220 40% 22%;
+    --popover-foreground: 224 100% 97%;
+    --primary: 213 79% 42%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 218 42% 18%;
+    --secondary-foreground: 224 100% 97%;
+    --muted: 222 25% 20%;
+    --muted-foreground: 220 20% 55%;
+    --accent: 213 79% 42%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 70% 47%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 222 43% 30%;
+    --input: 222 43% 30%;
+    --ring: 213 79% 51%;
+    --radius: 6px;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-
-    --radius: 0.5rem;
-
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-background: 216 62% 15%;
+    --sidebar-foreground: 224 100% 97%;
+    --sidebar-primary: 213 79% 42%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 218 42% 18%;
+    --sidebar-accent-foreground: 224 100% 97%;
+    --sidebar-border: 222 43% 30%;
+    --sidebar-ring: 213 79% 51%;
   }
 }
 
@@ -98,8 +70,46 @@ All colors MUST be HSL.
   * {
     @apply border-border;
   }
-
   body {
-    @apply bg-background text-foreground;
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--color-bg-app);
+    color: var(--color-text-primary);
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
   }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-bg-app); }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--color-bg-card) 25%, var(--color-bg-surface) 50%, var(--color-bg-card) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+
+/* Pulse glow for selected nodes */
+@keyframes pulse-glow {
+  0%, 100% { filter: drop-shadow(0 0 6px var(--color-azure)); }
+  50% { filter: drop-shadow(0 0 16px var(--color-azure)); }
+}
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid var(--color-azure);
+  outline-offset: 2px;
+}
+
+/* Mono text */
+.font-mono {
+  font-family: 'IBM Plex Mono', monospace !important;
 }
