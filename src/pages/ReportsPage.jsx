@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { FileText, Download, Share2, Plus, RefreshCw } from "lucide-react";
+import { FileText, Download, Share2, Plus } from "lucide-react";
 import GscipCard from "../components/GscipCard";
+import { ReportsSkeleton } from "../components/Skeletons";
 import { fetchReports, generateReport } from "../services/api";
 
 const reportTypes = ["Crime Risk PDF", "Weekly Summary", "District Compare", "Model Audit", "CSV Export"];
@@ -42,11 +43,7 @@ export default function ReportsPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
-      </div>
-    );
+    return <ReportsSkeleton />;
   }
 
   return (

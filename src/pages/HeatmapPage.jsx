@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { Layers, Download, RefreshCw } from "lucide-react";
+import { Layers, Download } from "lucide-react";
 import { MapContainer, TileLayer, CircleMarker, Tooltip } from "react-leaflet";
 import RiskBadge from "../components/RiskBadge";
+import { HeatmapSkeleton } from "../components/Skeletons";
 import { fetchHeatmapData, fetchSHAPFeatures } from "../services/api";
 
 const blocks = [
-  { id: "047W", lat: 41.884, lng: -87.624, risk: 0.87, tier: "HIGH", address: "047W Madison St" },
+  { id: "047W", lat: 17.4065, lng: 78.4772, risk: 0.87, tier: "HIGH", address: "047W Madison St" },
   { id: "063E", lat: 41.773, lng: -87.566, risk: 0.74, tier: "HIGH", address: "063E 79th St" },
   { id: "025N", lat: 41.814, lng: -87.659, risk: 0.71, tier: "HIGH", address: "025N Kedzie Ave" },
   { id: "011W", lat: 41.796, lng: -87.613, risk: 0.68, tier: "MED", address: "011W 51st St" },
@@ -49,11 +50,7 @@ export default function Heatmap() {
   const tierColor = (tier) => tier === "HIGH" ? "#C62828" : tier === "MED" ? "#F57C00" : "#2E7D32";
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
-      </div>
-    );
+    return <HeatmapSkeleton />;
   }
 
   return (
@@ -100,7 +97,14 @@ export default function Heatmap() {
             ))}
           </MapContainer>
 
-          <div className="absolute bottom-4 right-4 rounded-lg p-3" style={{ background: "rgba(26,39,68,0.9)", border: "1px solid var(--color-border)" }}>
+          <div
+            className="absolute bottom-4 right-4 rounded-lg p-3"
+            style={{
+              background: "rgba(26,39,68,0.9)",
+              border: "1px solid var(--color-border)",
+              zIndex: 1000,
+            }}
+          >
             <p className="text-[10px] font-semibold uppercase mb-2" style={{ color: "var(--color-text-secondary)" }}>Legend</p>
             {legend.map((entry) => (
               <div key={entry.tier} className="flex items-center gap-2 mb-1">

@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, MapPin, MessageSquare, Download, RefreshCw } from "lucide-react";
+import { ArrowLeft, MapPin, MessageSquare, Download } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceLine } from "recharts";
 import GscipCard from "../components/GscipCard";
 import RiskBadge from "../components/RiskBadge";
+import { BlockDetailSkeleton } from "../components/Skeletons";
 import { fetchBlockDetail, fetchBlockTimeline, fetchSHAPFeatures } from "../services/api";
 
 export default function BlockDetailPage() {
@@ -37,11 +38,7 @@ export default function BlockDetailPage() {
   const chartTooltipStyle = { background: "#1A2744", border: "1px solid #2A3F6F", borderRadius: 6, fontSize: 12, color: "#F0F4FF" };
 
   if (loading || !block) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
-      </div>
-    );
+    return <BlockDetailSkeleton />;
   }
 
   const b = block;

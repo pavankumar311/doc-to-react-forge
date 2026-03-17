@@ -4,6 +4,7 @@ import { LineChart, Line, ResponsiveContainer, Tooltip } from "recharts";
 import { Link } from "react-router-dom";
 import GscipCard from "../components/GscipCard";
 import RiskBadge from "../components/RiskBadge";
+import { DashboardSkeleton } from "../components/Skeletons";
 import { useFilters } from "../contexts/FilterContext";
 import { fetchTopRiskBlocks, fetchWeeklyTrend, fetchAlerts } from "../services/api";
 
@@ -52,11 +53,7 @@ export default function Dashboard() {
   useEffect(() => { loadData(); }, [loadData]);
 
   if (loading || summaryLoading || !summaryData) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   return (

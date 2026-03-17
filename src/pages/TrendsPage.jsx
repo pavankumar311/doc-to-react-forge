@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { LineChart, Line, BarChart, Bar, ComposedChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ReferenceLine } from "recharts";
-import { Download, RefreshCw } from "lucide-react";
+import { Download } from "lucide-react";
 import GscipCard from "../components/GscipCard";
+import { TrendsSkeleton } from "../components/Skeletons";
 import { useFilters } from "../contexts/FilterContext";
 import { fetchTrendCompare, fetchRollingTrend, fetchCrimeTypes, fetchSpikeEvents } from "../services/api";
 
@@ -58,11 +59,7 @@ export default function TrendsPage() {
   const chartTooltipStyle = { background: "#1A2744", border: "1px solid #2A3F6F", borderRadius: 6, fontSize: 12, color: "#F0F4FF" };
 
   if (trendLoading || auxLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
-      </div>
-    );
+    return <TrendsSkeleton />;
   }
 
   return (

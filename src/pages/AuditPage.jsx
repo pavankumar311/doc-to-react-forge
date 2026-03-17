@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { RefreshCw } from "lucide-react";
 import GscipCard from "../components/GscipCard";
+import { AuditSkeleton } from "../components/Skeletons";
 import { fetchAuditLogs } from "../services/api";
 
 export default function AuditPage() {
@@ -23,11 +23,7 @@ export default function AuditPage() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
-      </div>
-    );
+    return <AuditSkeleton />;
   }
 
   return (

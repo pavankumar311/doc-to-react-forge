@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { LineChart, Line, ScatterChart, Scatter, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import GscipCard from "../components/GscipCard";
+import { ModelsSkeleton } from "../components/Skeletons";
 import { fetchModelVersions, fetchSHAPFeatures } from "../services/api";
 
 export default function ModelsPage() {
@@ -52,11 +53,7 @@ export default function ModelsPage() {
   const chartTooltipStyle = { background: "#1A2744", border: "1px solid #2A3F6F", borderRadius: 6, fontSize: 12, color: "#F0F4FF" };
 
   if (loading || !active) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
-      </div>
-    );
+    return <ModelsSkeleton />;
   }
 
   return (

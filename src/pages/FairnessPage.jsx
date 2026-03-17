@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { AlertTriangle, CheckCircle, Download, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle, Download } from "lucide-react";
 import GscipCard from "../components/GscipCard";
+import { FairnessSkeleton } from "../components/Skeletons";
 import { fetchBiasData } from "../services/api";
 
 export default function FairnessPage() {
@@ -26,11 +27,7 @@ export default function FairnessPage() {
   }, [threshold]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
-      </div>
-    );
+    return <FairnessSkeleton />;
   }
 
   const flaggedCount = biasData.filter((d) => d.flagged).length + biasPerCrimeType.filter((d) => d.flagged).length;
