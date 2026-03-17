@@ -20,8 +20,8 @@ import NotFound from "./pages/NotFound";
 
 const App = () => (
   <AuthProvider>
-    <FilterProvider>
-      <BrowserRouter>
+    <BrowserRouter>
+      <FilterProvider>
         <Toaster />
         <GlobalHeader />
         <Sidebar />
@@ -44,8 +44,8 @@ const App = () => (
             </Routes>
           </main>
         </div>
-      </BrowserRouter>
-    </FilterProvider>
+      </FilterProvider>
+    </BrowserRouter>
   </AuthProvider>
 );
 
