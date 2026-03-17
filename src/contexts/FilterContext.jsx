@@ -99,9 +99,9 @@ export function FilterProvider({ children }) {
 
     const loadOptions = async () => {
       try {
-        const res = await fetch("http://localhost:6000/api/v1/dashoard/filters", {
+        const res = await fetch("http://localhost:9000/api/v1/dashoard/filters", {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`, // adjust if needed
+            Authorization: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3MzcyNzYyOSwgImV4cCI6IDE3NzM4MTQwMjl9.sfJHNjwQefkaIQuyASBjGgj7-UkGjIeWCZ8Xg69t-eE`, // adjust if needed
           },
         });
 
