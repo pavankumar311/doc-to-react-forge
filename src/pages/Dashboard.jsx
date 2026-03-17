@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle, RefreshCw, ArrowRight } from "lucide-react";
+import { TrendingUp, AlertTriangle, CheckCircle, RefreshCw, ArrowRight } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer, Tooltip } from "recharts";
 import { Link } from "react-router-dom";
 import GscipCard from "../components/GscipCard";
 import RiskBadge from "../components/RiskBadge";
-import { fetchKPIs, fetchTopRiskBlocks, fetchWeeklyTrend, fetchAlerts } from "../services/api";
+import { useFilters } from "../contexts/FilterContext";
+import { fetchTopRiskBlocks, fetchWeeklyTrend, fetchAlerts } from "../services/api";
 
 function KpiCard({ label, value, trend, icon }) {
   return (
@@ -24,7 +25,7 @@ function KpiCard({ label, value, trend, icon }) {
 }
 
 export default function Dashboard() {
-  const [kpiData, setKpiData] = useState(null);
+  const { summaryData, summaryLoading } = useFilters();
   const [topRiskBlocks, setTopRiskBlocks] = useState([]);
   const [weeklyTrend, setWeeklyTrend] = useState([]);
   const [alerts, setAlerts] = useState([]);
@@ -33,13 +34,11 @@ export default function Dashboard() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [kpis, blocks, trend, alertList] = await Promise.all([
-        fetchKPIs(),
+      const [blocks, trend, alertList] = await Promise.all([
         fetchTopRiskBlocks(),
         fetchWeeklyTrend(),
         fetchAlerts(),
       ]);
-      setKpiData(kpis);
       setTopRiskBlocks(blocks);
       setWeeklyTrend(trend);
       setAlerts(alertList);
@@ -52,7 +51,7 @@ export default function Dashboard() {
 
   useEffect(() => { loadData(); }, []);
 
-  if (loading || !kpiData) {
+  if (loading || summaryLoading || !summaryData) {
     return (
       <div className="flex items-center justify-center h-64">
         <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
@@ -75,27 +74,27 @@ export default function Dashboard() {
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <KpiCard
-          label="Total Crimes (30d)"
-          value={kpiData.totalCrimes.value.toLocaleString()}
-          trend={{ label: `▲ ${kpiData.totalCrimes.delta}% vs 30d`, color: "#C62828" }}
+          label="Total Incidents"
+          value={summaryData.total_incidents.toLocaleString()}
+          trend={{ label: `Arrest Rate ${summaryData.arrest_rate_pct}%`, color: "#2E7D32" }}
           icon={<TrendingUp size={14} />}
         />
         <KpiCard
-          label="High Risk Blocks"
-          value={kpiData.highRiskBlocks.value}
-          trend={{ label: `▲ ${kpiData.highRiskBlocks.label}`, color: "#F57C00" }}
+          label="Arrest Count"
+          value={summaryData.arrest_count.toLocaleString()}
+          trend={{ label: `Arrest Rate ${summaryData.arrest_rate_pct}%`, color: "#1E88E5" }}
           icon={<TrendingUp size={14} />}
         />
         <KpiCard
-          label="Active Spike Alerts"
-          value={kpiData.spikeAlerts.value}
-          trend={{ label: `${kpiData.spikeAlerts.critical} critical`, color: "#C62828" }}
+          label="Domestic Count"
+          value={summaryData.domestic_count.toLocaleString()}
+          trend={{ label: `Domestic Rate ${summaryData.domestic_rate_pct}%`, color: "#F57C00" }}
           icon={<AlertTriangle size={14} />}
         />
         <KpiCard
-          label="Model RMSE"
-          value={kpiData.modelRMSE.value}
-          trend={{ label: "✓ Target met", color: "#2E7D32" }}
+          label="Active Blocks"
+          value={summaryData.active_block_count.toLocaleString()}
+          trend={{ label: `District ${summaryData.district_scope?.join(", ") || "All"}`, color: "#2E7D32" }}
           icon={<CheckCircle size={14} />}
         />
       </div>

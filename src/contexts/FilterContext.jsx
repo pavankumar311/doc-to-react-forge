@@ -14,6 +14,7 @@ const defaultFilters = {
 const DEFAULT_DISTRICT_OPTIONS = ["District 7", "District 8", "District 11", "District 14"];
 const DEFAULT_CRIME_TYPE_OPTIONS = ["Theft", "Assault", "Burglary", "Battery", "Robbery"];
 const DEFAULT_RISK_TIER_OPTIONS = ["HIGH", "MED", "LOW"];
+const SUMMARY_ENDPOINT = "http://localhost:9000/api/v1/dashboard/summary";
 
 function parseArrayParam(value) {
   if (!value) return [];
@@ -56,6 +57,41 @@ function countActiveFilters(filters) {
   return count;
 }
 
+function normalizeDistrictId(value) {
+  if (value == null) return "";
+  const str = String(value).trim();
+  const digits = str.match(/\d+/)?.[0];
+  if (!digits) return str;
+  return digits.padStart(3, "0");
+}
+
+function normalizeCrimeTypeId(value) {
+  if (value == null) return "";
+  return String(value).trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function buildSummaryUrl(filters, districtIdByName, crimeTypeIdByName) {
+  const params = new URLSearchParams();
+  params.set("date_from", filters.dateFrom);
+  params.set("date_to", filters.dateTo);
+
+  if (filters.districts.length > 0) {
+    const ids = filters.districts
+      .map((name) => districtIdByName[name] ?? normalizeDistrictId(name))
+      .filter(Boolean);
+    if (ids.length > 0) params.set("district_ids", ids.join(","));
+  }
+
+  if (filters.crimeTypes.length > 0) {
+    const ids = filters.crimeTypes
+      .map((name) => crimeTypeIdByName[name] ?? normalizeCrimeTypeId(name))
+      .filter(Boolean);
+    if (ids.length > 0) params.set("crime_type_ids", ids.join(","));
+  }
+
+  return `${SUMMARY_ENDPOINT}?${params.toString()}`;
+}
+
 export function FilterProvider({ children }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState(() => filtersFromParams(searchParams));
@@ -63,6 +99,10 @@ export function FilterProvider({ children }) {
   const [districtOptions, setDistrictOptions] = useState(DEFAULT_DISTRICT_OPTIONS);
   const [crimeTypeOptions, setCrimeTypeOptions] = useState(DEFAULT_CRIME_TYPE_OPTIONS);
   const [riskTierOptions, setRiskTierOptions] = useState(DEFAULT_RISK_TIER_OPTIONS);
+  const [districtIdByName, setDistrictIdByName] = useState({});
+  const [crimeTypeIdByName, setCrimeTypeIdByName] = useState({});
+  const [summaryData, setSummaryData] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   const hasChanges = useMemo(
     () => JSON.stringify(pendingFilters) !== JSON.stringify(filters),
@@ -94,12 +134,32 @@ export function FilterProvider({ children }) {
     setSearchParams({}, { replace: true });
   }, [setSearchParams]);
 
-  useEffect(() => {
-    let isMounted = true;
+  const fetchSummary = useCallback(
+    async (nextFilters) => {
+      try {
+        setSummaryLoading(true);
+        const url = buildSummaryUrl(nextFilters, districtIdByName, crimeTypeIdByName);
+        const res = await fetch(url, {
+          headers: {
+            Authorization: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3MzcyNzYyOSwgImV4cCI6IDE3NzM4MTQwMjl9.sfJHNjwQefkaIQuyASBjGgj7-UkGjIeWCZ8Xg69t-eE`,
+          },
+        });
+        if (!res.ok) throw new Error(`Summary fetch failed: ${res.status}`);
+        const data = await res.json();
+        setSummaryData(data);
+      } catch (err) {
+        console.error("Summary API error:", err);
+      } finally {
+        setSummaryLoading(false);
+      }
+    },
+    [districtIdByName, crimeTypeIdByName]
+  );
 
+  useEffect(() => {
     const loadOptions = async () => {
       try {
-        const res = await fetch("http://localhost:9000/api/v1/dashoard/filters", {
+        const res = await fetch("http://localhost:9000/api/v1/dashboard/filters", {
           headers: {
             Authorization: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3MzcyNzYyOSwgImV4cCI6IDE3NzM4MTQwMjl9.sfJHNjwQefkaIQuyASBjGgj7-UkGjIeWCZ8Xg69t-eE`, // adjust if needed
           },
@@ -108,13 +168,35 @@ export function FilterProvider({ children }) {
         if (!res.ok) throw new Error("Failed to fetch filters");
 
         const data = await res.json();
-        const districts = data?.districts?.map(d => d.district_name) || DEFAULT_DISTRICT_OPTIONS;
-        const crimeTypes = data?.crime_types?.map(c => c.primary_type) || DEFAULT_CRIME_TYPE_OPTIONS;
+        const districtMap = {};
+        const crimeTypeMap = {};
+
+        const districts =
+          data?.districts
+            ?.map((d) => {
+              const name = d?.district_name;
+              const id = d?.district_id ?? d?.id;
+              if (name && id != null) districtMap[name] = normalizeDistrictId(id);
+              return name;
+            })
+            .filter(Boolean) || DEFAULT_DISTRICT_OPTIONS;
+
+        const crimeTypes =
+          data?.crime_types
+            ?.map((c) => {
+              const name = c?.primary_type;
+              const id = c?.crime_type_id ?? c?.id;
+              if (name && id != null) crimeTypeMap[name] = String(id);
+              return name;
+            })
+            .filter(Boolean) || DEFAULT_CRIME_TYPE_OPTIONS;
 
         // ✅ Set state
         setDistrictOptions(districts);
         setCrimeTypeOptions(crimeTypes);
         setRiskTierOptions(data?.riskTiers || DEFAULT_RISK_TIER_OPTIONS);
+        setDistrictIdByName(districtMap);
+        setCrimeTypeIdByName(crimeTypeMap);
       } catch (err) {
         console.error("Filter API error:", err);
 
@@ -122,13 +204,12 @@ export function FilterProvider({ children }) {
         setDistrictOptions(DEFAULT_DISTRICT_OPTIONS);
         setCrimeTypeOptions(DEFAULT_CRIME_TYPE_OPTIONS);
         setRiskTierOptions(DEFAULT_RISK_TIER_OPTIONS);
+        setDistrictIdByName({});
+        setCrimeTypeIdByName({});
       }
     };
 
     loadOptions();
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   // Sync from URL on popstate / external changes
@@ -137,6 +218,10 @@ export function FilterProvider({ children }) {
     setFilters(fromUrl);
     setPendingFilters(fromUrl);
   }, [searchParams]);
+
+  useEffect(() => {
+    fetchSummary(filters);
+  }, [filters, fetchSummary]);
 
   return (
     <FilterContext.Provider
@@ -149,6 +234,9 @@ export function FilterProvider({ children }) {
         togglePendingArrayItem,
         applyFilters,
         clearFilters,
+ 
+        summaryData,
+        summaryLoading,
         DISTRICT_OPTIONS: districtOptions,
         CRIME_TYPE_OPTIONS: crimeTypeOptions,
         RISK_TIER_OPTIONS: riskTierOptions,
