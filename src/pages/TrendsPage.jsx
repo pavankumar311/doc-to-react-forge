@@ -3,12 +3,13 @@ import { LineChart, Line, BarChart, Bar, ComposedChart, ResponsiveContainer, XAx
 import { Download, RefreshCw } from "lucide-react";
 import GscipCard from "../components/GscipCard";
 import { useFilters } from "../contexts/FilterContext";
-import { fetchTrendCompare, fetchCrimeTypes, fetchSpikeEvents } from "../services/api";
+import { fetchTrendCompare, fetchRollingTrend, fetchCrimeTypes, fetchSpikeEvents } from "../services/api";
 
 export default function TrendsPage() {
   const [granularity, setGranularity] = useState("Daily");
   const [trendData, setTrendData] = useState([]);
   const [trendDistricts, setTrendDistricts] = useState([]);
+  const [rollingTrend, setRollingTrend] = useState({ avg_7d: 0, avg_30d: 0, trend_slope: 0, series: [] });
   const [crimeTypes, setCrimeTypes] = useState([]);
   const [spikeEvents, setSpikeEvents] = useState([]);
   const [trendLoading, setTrendLoading] = useState(true);
@@ -22,9 +23,13 @@ export default function TrendsPage() {
     const loadTrend = async () => {
       setTrendLoading(true);
       try {
-        const trendCompare = await fetchTrendCompare({ filters, windowType, districtIdByName });
+        const [trendCompare, rolling] = await Promise.all([
+          fetchTrendCompare({ filters, windowType, districtIdByName }),
+          fetchRollingTrend({ filters }),
+        ]);
         setTrendData(trendCompare.series);
         setTrendDistricts(trendCompare.districts);
+        setRollingTrend(rolling);
       } catch (err) {
         console.error("TrendsPage load error:", err);
       } finally {
@@ -110,18 +115,35 @@ export default function TrendsPage() {
       <div className="grid grid-cols-2 gap-4 mb-4">
         <GscipCard title="Rolling 7D vs 30D">
           <ResponsiveContainer width="100%" height={200}>
-            <ComposedChart data={trendData.slice(0, 14)}>
+            <ComposedChart data={rollingTrend.series}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2A3F6F" />
-              <XAxis dataKey="date" stroke="#4A5880" fontSize={10} fontFamily="IBM Plex Mono" />
+              <XAxis dataKey="label" stroke="#4A5880" fontSize={10} fontFamily="IBM Plex Mono" />
               <YAxis stroke="#4A5880" fontSize={10} fontFamily="IBM Plex Mono" />
               <Tooltip contentStyle={chartTooltipStyle} />
-              <Bar dataKey="crimes" fill="#1565C0" fillOpacity={0.6} radius={[2, 2, 0, 0]} />
-              <ReferenceLine y={82} stroke="#F57C00" strokeDasharray="5 5" label={{ value: "30d avg", fill: "#F57C00", fontSize: 10 }} />
-              <ReferenceLine y={94} stroke="#1E88E5" strokeDasharray="5 5" label={{ value: "7d avg", fill: "#1E88E5", fontSize: 10 }} />
+              <Bar dataKey="crime_count" fill="#1565C0" fillOpacity={0.6} radius={[2, 2, 0, 0]} />
+              {Number.isFinite(rollingTrend.avg_30d) && rollingTrend.avg_30d > 0 && (
+                <ReferenceLine
+                  y={rollingTrend.avg_30d}
+                  stroke="#F57C00"
+                  strokeDasharray="5 5"
+                  label={{ value: "30d avg", fill: "#F57C00", fontSize: 10 }}
+                />
+              )}
+              {Number.isFinite(rollingTrend.avg_7d) && rollingTrend.avg_7d > 0 && (
+                <ReferenceLine
+                  y={rollingTrend.avg_7d}
+                  stroke="#1E88E5"
+                  strokeDasharray="5 5"
+                  label={{ value: "7d avg", fill: "#1E88E5", fontSize: 10 }}
+                />
+              )}
             </ComposedChart>
           </ResponsiveContainer>
           <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
-            Trend slope: <span style={{ color: "#C62828" }}>▲ +2.1/day</span>
+            Trend slope:{" "}
+            <span style={{ color: rollingTrend.trend_slope >= 0 ? "#2E7D32" : "#C62828" }}>
+              {rollingTrend.trend_slope >= 0 ? "+" : "-"} {Math.abs(rollingTrend.trend_slope).toFixed(1)}/day
+            </span>
           </p>
         </GscipCard>
 

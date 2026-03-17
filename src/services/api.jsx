@@ -94,6 +94,12 @@ function buildTrendCompareUrl({ filters, windowType, districtIdByName }) {
   return `${DASHBOARD_API_BASE}/trends/compare?${params.toString()}`;
 }
 
+function buildRollingTrendUrl({ filters }) {
+  const params = new URLSearchParams();
+  if (filters?.dateTo) params.set("date_to", filters.dateTo);
+  return `${DASHBOARD_API_BASE}/trends/rolling?${params.toString()}`;
+}
+
 function districtKey(id) {
   return `district_${normalizeDistrictId(id)}`;
 }
@@ -276,6 +282,35 @@ export async function fetchTrendCompare({ filters, windowType = "month", distric
   } catch (err) {
     console.error("fetchTrendCompare failed:", err);
     return { series: [], districts: [], window_type: windowType };
+  }
+}
+
+export async function fetchRollingTrend({ filters } = {}) {
+  try {
+    const url = buildRollingTrendUrl({ filters });
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${DASHBOARD_AUTH_TOKEN}`,
+      },
+    });
+    if (!res.ok) throw new Error(`Rolling trend fetch failed: ${res.status}`);
+    const payload = await res.json();
+    const chart = payload?.chart_data ?? [];
+    const series = chart.map((row) => ({
+      date: row?.date ?? null,
+      label: row?.label ?? row?.date?.slice?.(0, 10) ?? "",
+      crime_count: Number(row?.crime_count ?? row?.crimeCount ?? 0),
+    }));
+
+    return {
+      avg_7d: Number(payload?.avg_7d ?? 0),
+      avg_30d: Number(payload?.avg_30d ?? 0),
+      trend_slope: Number(payload?.trend_slope ?? 0),
+      series,
+    };
+  } catch (err) {
+    console.error("fetchRollingTrend failed:", err);
+    return { avg_7d: 0, avg_30d: 0, trend_slope: 0, series: [] };
   }
 }
 export async function fetchTrendData(filters = {}) {
