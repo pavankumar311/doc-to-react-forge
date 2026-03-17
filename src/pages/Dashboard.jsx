@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { TrendingUp, AlertTriangle, CheckCircle, RefreshCw, ArrowRight } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer, Tooltip } from "recharts";
 import { Link } from "react-router-dom";
@@ -25,17 +25,17 @@ function KpiCard({ label, value, trend, icon }) {
 }
 
 export default function Dashboard() {
-  const { summaryData, summaryLoading } = useFilters();
+  const { summaryData, summaryLoading, filters, districtIdByName, crimeTypeIdByName } = useFilters();
   const [topRiskBlocks, setTopRiskBlocks] = useState([]);
   const [weeklyTrend, setWeeklyTrend] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [blocks, trend, alertList] = await Promise.all([
-        fetchTopRiskBlocks(),
+        fetchTopRiskBlocks({ filters, limit: 5, districtIdByName, crimeTypeIdByName }),
         fetchWeeklyTrend(),
         fetchAlerts(),
       ]);
@@ -47,9 +47,9 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, districtIdByName, crimeTypeIdByName]);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [loadData]);
 
   if (loading || summaryLoading || !summaryData) {
     return (
@@ -136,10 +136,12 @@ export default function Dashboard() {
                 </span>
                 <div className="flex items-center gap-2">
                   <div className="h-2 rounded-full" style={{
-                    width: block.riskScore * 80,
+                    width: (block.riskScore || 0.2) * 80,
                     background: block.tier === "HIGH" ? "#C62828" : "#F57C00",
                   }} />
-                  <span className="font-mono text-xs w-8 text-right" style={{ color: "var(--color-text-primary)" }}>{block.riskScore}</span>
+                  <span className="font-mono text-xs w-10 text-right" style={{ color: "var(--color-text-primary)" }}>
+                    {Number.isFinite(block.crimeCount) ? block.crimeCount : "--"}
+                  </span>
                   <RiskBadge tier={block.tier} size="small" />
                 </div>
               </Link>

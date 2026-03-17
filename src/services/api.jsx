@@ -34,6 +34,49 @@ import {
 // ── Configuration ──────────────────────────────────────────────────────
 // const API_BASE_URL = "https://api.gscip.gov/v1";
 // const API_KEY = process.env.REACT_APP_GSCIP_API_KEY || "";
+const DASHBOARD_API_BASE = "http://localhost:9000/api/v1/dashboard";
+const DASHBOARD_AUTH_TOKEN =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3MzcyNzYyOSwgImV4cCI6IDE3NzM4MTQwMjl9.sfJHNjwQefkaIQuyASBjGgj7-UkGjIeWCZ8Xg69t-eE";
+
+function normalizeDistrictId(value) {
+  if (value == null) return "";
+  const str = String(value).trim();
+  const digits = str.match(/\d+/)?.[0];
+  if (!digits) return str;
+  return digits.padStart(3, "0");
+}
+
+function normalizeCrimeTypeId(value) {
+  if (value == null) return "";
+  return String(value).trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function buildTopRiskBlocksUrl({ filters, limit, districtIdByName, crimeTypeIdByName }) {
+  const params = new URLSearchParams();
+  params.set("date_from", filters?.dateFrom);
+  params.set("date_to", filters?.dateTo);
+  if (limit) params.set("limit", String(limit));
+
+  if (filters?.districts?.length) {
+    const ids = filters.districts
+      .map((name) => districtIdByName?.[name] ?? normalizeDistrictId(name))
+      .filter(Boolean);
+    if (ids.length > 0) params.set("district_ids", ids.join(","));
+  }
+
+  if (filters?.crimeTypes?.length) {
+    const ids = filters.crimeTypes
+      .map((name) => crimeTypeIdByName?.[name] ?? normalizeCrimeTypeId(name))
+      .filter(Boolean);
+    if (ids.length > 0) params.set("crime_type_ids", ids.join(","));
+  }
+
+  if (filters?.riskTiers?.length) {
+    params.set("risk_tiers", filters.riskTiers.join(","));
+  }
+
+  return `${DASHBOARD_API_BASE}/map/blocks?${params.toString()}`;
+}
 
 // ── Helper: authenticated fetch ────────────────────────────────────────
 // async function apiFetch(endpoint, options = {}) {
@@ -84,20 +127,38 @@ export async function fetchKPIs(filters = {}) {
   return Promise.resolve(kpiData);
 }
 
-export async function fetchTopRiskBlocks(filters = {}) {
-  // Real API implementation:
-  // try {
-  //   const params = new URLSearchParams();
-  //   if (filters.district) params.append("district", filters.district);
-  //   if (filters.limit) params.append("limit", filters.limit);
-  //   const data = await apiFetch(`/blocks/top-risk?${params}`);
-  //   return data.blocks;
-  // } catch (err) {
-  //   console.error("fetchTopRiskBlocks failed:", err);
-  //   throw err;
-  // }
+export async function fetchTopRiskBlocks({ filters, limit = 5, districtIdByName, crimeTypeIdByName } = {}) {
+  try {
+    const url = buildTopRiskBlocksUrl({ filters, limit, districtIdByName, crimeTypeIdByName });
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${DASHBOARD_AUTH_TOKEN}`,
+      },
+    });
+    if (!res.ok) throw new Error(`Top risk blocks fetch failed: ${res.status}`);
+    const data = await res.json();
+    const rawBlocks = data?.blocks ?? data ?? [];
+    const maxCrimeCount = rawBlocks.reduce((max, block) => {
+      const val = Number(block?.crime_count ?? block?.crimeCount ?? 0);
+      return Number.isFinite(val) ? Math.max(max, val) : max;
+    }, 0);
 
-  return Promise.resolve(topRiskBlocks);
+    return rawBlocks.map((block) => {
+      const crimeCount = Number(block?.crime_count ?? block?.crimeCount ?? 0);
+      const riskScore = maxCrimeCount > 0 ? Math.max(0.1, crimeCount / maxCrimeCount) : 0.2;
+      return {
+        ...block,
+        id: block?.id ?? block?.block_id ?? block?.blockId,
+        address: block?.address ?? block?.block_address ?? block?.blockAddress,
+        crimeCount,
+        riskScore,
+        tier: block?.tier ?? "HIGH",
+      };
+    });
+  } catch (err) {
+    console.error("fetchTopRiskBlocks failed:", err);
+    return [];
+  }
 }
 
 export async function fetchAlerts(filters = {}) {

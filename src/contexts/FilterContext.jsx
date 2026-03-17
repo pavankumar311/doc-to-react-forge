@@ -240,6 +240,8 @@ export function FilterProvider({ children }) {
         DISTRICT_OPTIONS: districtOptions,
         CRIME_TYPE_OPTIONS: crimeTypeOptions,
         RISK_TIER_OPTIONS: riskTierOptions,
+        districtIdByName,
+        crimeTypeIdByName,
       }}
     >
       {children}
