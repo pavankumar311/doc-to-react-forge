@@ -34,19 +34,21 @@ function MultiSelectDropdown({ label, options, selected, onToggle }) {
         </button>
         {open && (
           <div className="absolute top-full left-0 mt-1 z-50 min-w-[180px] rounded-md border bg-popover text-popover-foreground shadow-md p-1 animate-in fade-in-0 zoom-in-95">
-            {options.map((opt) => (
-              <label
-                key={opt}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-sm text-sm cursor-pointer hover:bg-accent/50 transition-colors"
-              >
-                <Checkbox
-                  checked={selected.includes(opt)}
-                  onCheckedChange={() => onToggle(opt)}
-                  className="h-3.5 w-3.5"
-                />
-                <span>{opt}</span>
-              </label>
-            ))}
+            <div className="max-h-56 overflow-y-auto pr-1">
+              {options.map((opt) => (
+                <label
+                  key={opt}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-sm text-sm cursor-pointer hover:bg-accent/50 transition-colors"
+                >
+                  <Checkbox
+                    checked={selected.includes(opt)}
+                    onCheckedChange={() => onToggle(opt)}
+                    className="h-3.5 w-3.5"
+                  />
+                  <span>{opt}</span>
+                </label>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -55,34 +57,28 @@ function MultiSelectDropdown({ label, options, selected, onToggle }) {
 }
 
 /* ── Date Range Picker ─────────────────────────────────── */
-function DateRangePicker({ dateFrom, dateTo, onChange }) {
-  const from = parse(dateFrom, "yyyy-MM-dd", new Date());
-  const to = parse(dateTo, "yyyy-MM-dd", new Date());
-  const label = `${format(from, "MMM d")} — ${format(to, "MMM d, yyyy")}`;
+function DateInput({ label, value, onChange }) {
+  const parsed = parse(value, "yyyy-MM-dd", new Date());
+  const isValid = !Number.isNaN(parsed?.getTime());
+  const display = isValid ? format(parsed, "MMM d, yyyy") : "Select";
 
-  const handleSelect = (range) => {
-    if (range?.from) onChange("dateFrom", format(range.from, "yyyy-MM-dd"));
-    if (range?.to) onChange("dateTo", format(range.to, "yyyy-MM-dd"));
+  const handleSelect = (date) => {
+    if (!date) return;
+    onChange(format(date, "yyyy-MM-dd"));
   };
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Date</span>
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
       <Popover>
         <PopoverTrigger asChild>
           <button className="flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium border border-input bg-background text-foreground hover:bg-accent/40 transition-colors">
             <CalendarIcon className="h-3.5 w-3.5 opacity-60" />
-            <span>{label}</span>
+            <span>{display}</span>
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
-          <Calendar
-            mode="range"
-            selected={{ from, to }}
-            onSelect={handleSelect}
-            numberOfMonths={2}
-            className="p-3 pointer-events-auto"
-          />
+          <Calendar mode="single" selected={isValid ? parsed : undefined} onSelect={handleSelect} className="p-3" />
         </PopoverContent>
       </Popover>
     </div>
@@ -109,10 +105,15 @@ export default function FilterBar() {
       className="sticky top-14 z-40 flex items-center gap-5 h-12 px-6 border-b border-border"
       style={{ background: "var(--color-bg-app)" }}
     >
-      <DateRangePicker
-        dateFrom={pendingFilters.dateFrom}
-        dateTo={pendingFilters.dateTo}
-        onChange={updatePending}
+      <DateInput
+        label="From Date"
+        value={pendingFilters.dateFrom}
+        onChange={(val) => updatePending("dateFrom", val)}
+      />
+      <DateInput
+        label="To Date"
+        value={pendingFilters.dateTo}
+        onChange={(val) => updatePending("dateTo", val)}
       />
 
       <MultiSelectDropdown

@@ -15,6 +15,8 @@ const DEFAULT_DISTRICT_OPTIONS = ["District 7", "District 8", "District 11", "Di
 const DEFAULT_CRIME_TYPE_OPTIONS = ["Theft", "Assault", "Burglary", "Battery", "Robbery"];
 const DEFAULT_RISK_TIER_OPTIONS = ["HIGH", "MED", "LOW"];
 const SUMMARY_ENDPOINT = "http://localhost:9000/api/v1/dashboard/summary";
+const FILTER_STORAGE_KEY = "gscip.filters";
+const FILTER_PARAM_KEYS = ["dateFrom", "dateTo", "districts", "crimeTypes", "riskTiers"];
 
 function parseArrayParam(value) {
   if (!value) return [];
@@ -46,6 +48,50 @@ function filtersToParams(filters) {
   const r = serializeArrayParam(filters.riskTiers);
   if (r) p.riskTiers = r;
   return p;
+}
+
+function hasFilterParams(params) {
+  return FILTER_PARAM_KEYS.some((key) => params.get(key));
+}
+
+function normalizeStoredFilters(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    dateFrom: typeof value.dateFrom === "string" ? value.dateFrom : defaultFilters.dateFrom,
+    dateTo: typeof value.dateTo === "string" ? value.dateTo : defaultFilters.dateTo,
+    districts: Array.isArray(value.districts) ? value.districts.filter(Boolean) : [],
+    crimeTypes: Array.isArray(value.crimeTypes) ? value.crimeTypes.filter(Boolean) : [],
+    riskTiers: Array.isArray(value.riskTiers) ? value.riskTiers.filter(Boolean) : [],
+  };
+}
+
+function readStoredFilters() {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem(FILTER_STORAGE_KEY);
+    if (!raw) return null;
+    return normalizeStoredFilters(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredFilters(filters) {
+  try {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function clearStoredFilters() {
+  try {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem(FILTER_STORAGE_KEY);
+  } catch {
+    // ignore storage errors
+  }
 }
 
 function countActiveFilters(filters) {
@@ -94,8 +140,16 @@ function buildSummaryUrl(filters, districtIdByName, crimeTypeIdByName) {
 
 export function FilterProvider({ children }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [filters, setFilters] = useState(() => filtersFromParams(searchParams));
-  const [pendingFilters, setPendingFilters] = useState(() => filtersFromParams(searchParams));
+  const [filters, setFilters] = useState(() => {
+    const fromUrl = hasFilterParams(searchParams) ? filtersFromParams(searchParams) : null;
+    const fromStorage = fromUrl ? null : readStoredFilters();
+    return fromUrl || fromStorage || defaultFilters;
+  });
+  const [pendingFilters, setPendingFilters] = useState(() => {
+    const fromUrl = hasFilterParams(searchParams) ? filtersFromParams(searchParams) : null;
+    const fromStorage = fromUrl ? null : readStoredFilters();
+    return fromUrl || fromStorage || defaultFilters;
+  });
   const [districtOptions, setDistrictOptions] = useState(DEFAULT_DISTRICT_OPTIONS);
   const [crimeTypeOptions, setCrimeTypeOptions] = useState(DEFAULT_CRIME_TYPE_OPTIONS);
   const [riskTierOptions, setRiskTierOptions] = useState(DEFAULT_RISK_TIER_OPTIONS);
@@ -126,12 +180,14 @@ export function FilterProvider({ children }) {
   const applyFilters = useCallback(() => {
     setFilters(pendingFilters);
     setSearchParams(filtersToParams(pendingFilters), { replace: true });
+    writeStoredFilters(pendingFilters);
   }, [pendingFilters, setSearchParams]);
 
   const clearFilters = useCallback(() => {
     setFilters(defaultFilters);
     setPendingFilters(defaultFilters);
     setSearchParams({}, { replace: true });
+    clearStoredFilters();
   }, [setSearchParams]);
 
   const fetchSummary = useCallback(
@@ -212,12 +268,38 @@ export function FilterProvider({ children }) {
     loadOptions();
   }, []);
 
-  // Sync from URL on popstate / external changes
+  // Sync from URL on popstate / external changes when URL has filter params
   useEffect(() => {
+    if (!hasFilterParams(searchParams)) return;
     const fromUrl = filtersFromParams(searchParams);
     setFilters(fromUrl);
     setPendingFilters(fromUrl);
+    writeStoredFilters(fromUrl);
   }, [searchParams]);
+
+  // Sync across browser tabs
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== FILTER_STORAGE_KEY) return;
+      if (!e.newValue) {
+        setFilters(defaultFilters);
+        setPendingFilters(defaultFilters);
+        return;
+      }
+      let parsed = null;
+      try {
+        parsed = JSON.parse(e.newValue);
+      } catch {
+        return;
+      }
+      const next = normalizeStoredFilters(parsed);
+      if (!next) return;
+      setFilters(next);
+      setPendingFilters(next);
+    };
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
 
   useEffect(() => {
     fetchSummary(filters);
