@@ -1,7 +1,35 @@
+import { useState, useEffect } from "react";
+import { RefreshCw } from "lucide-react";
 import GscipCard from "../components/GscipCard";
-import { auditLogs } from "../services/mockData";
+import { fetchAuditLogs } from "../services/api";
 
 export default function AuditPage() {
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const data = await fetchAuditLogs();
+        setAuditLogs(data);
+      } catch (err) {
+        console.error("AuditPage load error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6" style={{ color: "var(--color-text-primary)" }}>Audit Log</h1>

@@ -1,18 +1,53 @@
-import { useState } from "react";
-import { FileText, Download, Share2, Trash2, Plus, Radio } from "lucide-react";
+import { useState, useEffect } from "react";
+import { FileText, Download, Share2, Plus, RefreshCw } from "lucide-react";
 import GscipCard from "../components/GscipCard";
-import { reports } from "../services/mockData";
+import { fetchReports, generateReport } from "../services/api";
 
 const reportTypes = ["Crime Risk PDF", "Weekly Summary", "District Compare", "Model Audit", "CSV Export"];
 
 export default function ReportsPage() {
   const [selectedType, setSelectedType] = useState("Crime Risk PDF");
   const [generating, setGenerating] = useState(false);
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleGenerate = () => {
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const data = await fetchReports();
+        setReports(data);
+      } catch (err) {
+        console.error("ReportsPage load error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  const handleGenerate = async () => {
     setGenerating(true);
-    setTimeout(() => setGenerating(false), 3000);
+    try {
+      const result = await generateReport({ type: selectedType, district: "8" });
+      console.log("Report generated:", result);
+      // Reload reports list after generation
+      const updated = await fetchReports();
+      setReports(updated);
+    } catch (err) {
+      console.error("Report generation error:", err);
+    } finally {
+      setGenerating(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -24,7 +59,6 @@ export default function ReportsPage() {
       </div>
 
       <div className="flex gap-6">
-        {/* Report Type Selector */}
         <div className="w-56 shrink-0">
           <GscipCard title="Report Type">
             <div className="space-y-1">
@@ -48,7 +82,6 @@ export default function ReportsPage() {
             </div>
           </GscipCard>
 
-          {/* Parameters */}
           <GscipCard title="Parameters" className="mt-4">
             <div className="space-y-3">
               <div>
@@ -87,7 +120,6 @@ export default function ReportsPage() {
           </GscipCard>
         </div>
 
-        {/* Report List */}
         <div className="flex-1">
           <GscipCard title="Recent Reports">
             <div className="space-y-3">

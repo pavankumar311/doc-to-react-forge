@@ -1,11 +1,34 @@
-import { useState } from "react";
-import { LineChart, Line, BarChart, Bar, ScatterChart, Scatter, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
-import { AlertTriangle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { LineChart, Line, ScatterChart, Scatter, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 import GscipCard from "../components/GscipCard";
-import { modelVersions, shapFeatures } from "../services/mockData";
+import { fetchModelVersions, fetchSHAPFeatures } from "../services/api";
 
 export default function ModelsPage() {
   const [showAllFeatures, setShowAllFeatures] = useState(false);
+  const [modelVersions, setModelVersions] = useState([]);
+  const [shapFeatures, setShapFeatures] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [versions, features] = await Promise.all([
+          fetchModelVersions(),
+          fetchSHAPFeatures("v2.1"),
+        ]);
+        setModelVersions(versions);
+        setShapFeatures(features);
+      } catch (err) {
+        console.error("ModelsPage load error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
   const active = modelVersions.find((m) => m.active);
 
   const scatterData = Array.from({ length: 30 }, () => {
@@ -28,9 +51,16 @@ export default function ModelsPage() {
   const displayed = showAllFeatures ? allFeatures : shapFeatures;
   const chartTooltipStyle = { background: "#1A2744", border: "1px solid #2A3F6F", borderRadius: 6, fontSize: 12, color: "#F0F4FF" };
 
+  if (loading || !active) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
+      </div>
+    );
+  }
+
   return (
     <div>
-      {/* Drift banner */}
       <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-lg" style={{ background: "rgba(245,124,0,0.15)", border: "1px solid rgba(245,124,0,0.3)" }}>
         <AlertTriangle size={16} style={{ color: "#F57C00" }} />
         <span className="text-sm" style={{ color: "#F57C00" }}>Model drift detected — consider retraining</span>
@@ -47,7 +77,6 @@ export default function ModelsPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         {[
           { label: "RMSE", value: active.rmse, delta: "▼ 18% vs baseline", color: "#2E7D32" },
@@ -63,7 +92,6 @@ export default function ModelsPage() {
         ))}
       </div>
 
-      {/* RMSE History */}
       <GscipCard title="RMSE History (All Versions)" className="mb-4">
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={modelVersions}>
@@ -80,7 +108,6 @@ export default function ModelsPage() {
       </GscipCard>
 
       <div className="grid grid-cols-2 gap-4">
-        {/* Feature Importance */}
         <GscipCard title="Feature Importance (SHAP)">
           <div className="space-y-2">
             {displayed.map((f) => (
@@ -103,7 +130,6 @@ export default function ModelsPage() {
           </button>
         </GscipCard>
 
-        {/* Prediction vs Actual */}
         <GscipCard title="Prediction vs Actual">
           <ResponsiveContainer width="100%" height={220}>
             <ScatterChart>

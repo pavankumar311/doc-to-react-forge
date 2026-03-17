@@ -1,14 +1,50 @@
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, MapPin, MessageSquare, Download } from "lucide-react";
+import { ArrowLeft, MapPin, MessageSquare, Download, RefreshCw } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip, ReferenceLine } from "recharts";
 import GscipCard from "../components/GscipCard";
 import RiskBadge from "../components/RiskBadge";
-import { blockDetail, shapFeatures, trendData } from "../services/mockData";
+import { fetchBlockDetail, fetchBlockTimeline, fetchSHAPFeatures } from "../services/api";
 
 export default function BlockDetailPage() {
   const { blockId } = useParams();
-  const b = blockDetail;
+  const [block, setBlock] = useState(null);
+  const [timeline, setTimeline] = useState([]);
+  const [shapFeatures, setShapFeatures] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [b, tl, shap] = await Promise.all([
+          fetchBlockDetail(blockId),
+          fetchBlockTimeline(blockId, 30),
+          fetchSHAPFeatures("v2.1"),
+        ]);
+        setBlock(b);
+        setTimeline(tl);
+        setShapFeatures(shap);
+      } catch (err) {
+        console.error("BlockDetail load error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [blockId]);
+
   const chartTooltipStyle = { background: "#1A2744", border: "1px solid #2A3F6F", borderRadius: 6, fontSize: 12, color: "#F0F4FF" };
+
+  if (loading || !block) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
+      </div>
+    );
+  }
+
+  const b = block;
 
   return (
     <div>
@@ -38,7 +74,6 @@ export default function BlockDetailPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
-        {/* Risk Score */}
         <GscipCard>
           <div className="flex items-center gap-6">
             <div aria-label={`Risk score ${b.riskScore}, tier ${b.tier}`}>
@@ -65,10 +100,9 @@ export default function BlockDetailPage() {
           </div>
         </GscipCard>
 
-        {/* Trend Sparkline */}
         <GscipCard title="30-Day Trend">
           <ResponsiveContainer width="100%" height={140}>
-            <AreaChart data={trendData}>
+            <AreaChart data={timeline}>
               <defs>
                 <linearGradient id="riskGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#C62828" stopOpacity={0.3} />
@@ -90,7 +124,6 @@ export default function BlockDetailPage() {
         </GscipCard>
       </div>
 
-      {/* Feature Breakdown */}
       <GscipCard title="Feature Breakdown (All 13 Features)" className="mb-6">
         <div className="grid grid-cols-3 gap-6">
           {[
@@ -113,7 +146,6 @@ export default function BlockDetailPage() {
         </div>
       </GscipCard>
 
-      {/* SHAP */}
       <GscipCard title="SHAP Explanation — Why is this block high risk?">
         <div className="space-y-3">
           {shapFeatures.map((f, i) => (
