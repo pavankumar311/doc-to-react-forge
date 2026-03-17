@@ -2,39 +2,57 @@ import { useState, useEffect } from "react";
 import { LineChart, Line, BarChart, Bar, ComposedChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ReferenceLine } from "recharts";
 import { Download, RefreshCw } from "lucide-react";
 import GscipCard from "../components/GscipCard";
-import { fetchTrendData, fetchCrimeTypes, fetchSpikeEvents } from "../services/api";
+import { useFilters } from "../contexts/FilterContext";
+import { fetchTrendCompare, fetchCrimeTypes, fetchSpikeEvents } from "../services/api";
 
 export default function TrendsPage() {
   const [granularity, setGranularity] = useState("Daily");
   const [trendData, setTrendData] = useState([]);
+  const [trendDistricts, setTrendDistricts] = useState([]);
   const [crimeTypes, setCrimeTypes] = useState([]);
   const [spikeEvents, setSpikeEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [trendLoading, setTrendLoading] = useState(true);
+  const [auxLoading, setAuxLoading] = useState(true);
+  const { filters, districtIdByName } = useFilters();
+
+  const windowType = granularity === "Daily" ? "day" : granularity === "Weekly" ? "week" : "month";
+  const lineColors = ["#1E88E5", "#F57C00", "#2E7D32", "#8E24AA", "#00897B", "#C62828"];
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
+    const loadTrend = async () => {
+      setTrendLoading(true);
       try {
-        const [trends, types, spikes] = await Promise.all([
-          fetchTrendData({ granularity: granularity.toLowerCase() }),
-          fetchCrimeTypes(),
-          fetchSpikeEvents(),
-        ]);
-        setTrendData(trends);
+        const trendCompare = await fetchTrendCompare({ filters, windowType, districtIdByName });
+        setTrendData(trendCompare.series);
+        setTrendDistricts(trendCompare.districts);
+      } catch (err) {
+        console.error("TrendsPage load error:", err);
+      } finally {
+        setTrendLoading(false);
+      }
+    };
+    loadTrend();
+  }, [granularity, filters, districtIdByName, windowType]);
+
+  useEffect(() => {
+    const loadAux = async () => {
+      setAuxLoading(true);
+      try {
+        const [types, spikes] = await Promise.all([fetchCrimeTypes(), fetchSpikeEvents()]);
         setCrimeTypes(types);
         setSpikeEvents(spikes);
       } catch (err) {
         console.error("TrendsPage load error:", err);
       } finally {
-        setLoading(false);
+        setAuxLoading(false);
       }
     };
-    load();
-  }, [granularity]);
+    loadAux();
+  }, []);
 
   const chartTooltipStyle = { background: "#1A2744", border: "1px solid #2A3F6F", borderRadius: 6, fontSize: 12, color: "#F0F4FF" };
 
-  if (loading) {
+  if (trendLoading || auxLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
@@ -70,13 +88,21 @@ export default function TrendsPage() {
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={trendData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#2A3F6F" />
-            <XAxis dataKey="date" stroke="#4A5880" fontSize={11} fontFamily="IBM Plex Mono" />
+            <XAxis dataKey="label" stroke="#4A5880" fontSize={11} fontFamily="IBM Plex Mono" />
             <YAxis stroke="#4A5880" fontSize={11} fontFamily="IBM Plex Mono" />
             <Tooltip contentStyle={chartTooltipStyle} />
             <Legend wrapperStyle={{ fontSize: 11, fontFamily: "IBM Plex Sans" }} />
-            <Line type="monotone" dataKey="dist7" name="District 7" stroke="#1E88E5" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="dist8" name="District 8" stroke="#F57C00" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="dist11" name="District 11" stroke="#2E7D32" strokeWidth={2} dot={false} />
+            {trendDistricts.map((district, index) => (
+              <Line
+                key={district.key}
+                type="monotone"
+                dataKey={district.key}
+                name={district.name}
+                stroke={lineColors[index % lineColors.length]}
+                strokeWidth={2}
+                dot={false}
+              />
+            ))}
           </LineChart>
         </ResponsiveContainer>
       </GscipCard>

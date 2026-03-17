@@ -78,6 +78,26 @@ function buildTopRiskBlocksUrl({ filters, limit, districtIdByName, crimeTypeIdBy
   return `${DASHBOARD_API_BASE}/map/blocks?${params.toString()}`;
 }
 
+function buildTrendCompareUrl({ filters, windowType, districtIdByName }) {
+  const params = new URLSearchParams();
+  if (windowType) params.set("window_type", windowType);
+  if (filters?.dateFrom) params.set("date_from", filters.dateFrom);
+  if (filters?.dateTo) params.set("date_to", filters.dateTo);
+
+  if (filters?.districts?.length) {
+    const ids = filters.districts
+      .map((name) => districtIdByName?.[name] ?? normalizeDistrictId(name))
+      .filter(Boolean);
+    if (ids.length > 0) params.set("district_ids", ids.join(","));
+  }
+
+  return `${DASHBOARD_API_BASE}/trends/compare?${params.toString()}`;
+}
+
+function districtKey(id) {
+  return `district_${normalizeDistrictId(id)}`;
+}
+
 // ── Helper: authenticated fetch ────────────────────────────────────────
 // async function apiFetch(endpoint, options = {}) {
 //   const res = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -208,6 +228,56 @@ export async function fetchWeeklyTrend(filters = {}) {
 }
 
 // ── Trends ─────────────────────────────────────────────────────────────
+export async function fetchTrendCompare({ filters, windowType = "month", districtIdByName } = {}) {
+  try {
+    const url = buildTrendCompareUrl({ filters, windowType, districtIdByName });
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${DASHBOARD_AUTH_TOKEN}`,
+      },
+    });
+    if (!res.ok) throw new Error(`Trend compare fetch failed: ${res.status}`);
+    const payload = await res.json();
+    const rows = payload?.data ?? payload ?? [];
+
+    const districtsMap = {};
+    rows.forEach((row) => {
+      const id = normalizeDistrictId(row?.district_id ?? row?.districtId ?? row?.district);
+      if (!id) return;
+      const name = row?.district_name ?? row?.districtName ?? `District ${id}`;
+      districtsMap[id] = name;
+    });
+
+    const byLabel = new Map();
+    rows.forEach((row) => {
+      const label = row?.label ?? row?.date?.slice?.(0, 10) ?? "";
+      if (!label) return;
+      const id = normalizeDistrictId(row?.district_id ?? row?.districtId ?? row?.district);
+      const key = districtKey(id || "unknown");
+      const crimeCount = Number(row?.crime_count ?? row?.crimeCount ?? 0);
+      const existing = byLabel.get(label) || { label, date: row?.date ?? null };
+      existing[key] = Number.isFinite(crimeCount) ? crimeCount : 0;
+      byLabel.set(label, existing);
+    });
+
+    const series = Array.from(byLabel.values()).sort((a, b) => {
+      const da = a.date ? new Date(a.date).getTime() : 0;
+      const db = b.date ? new Date(b.date).getTime() : 0;
+      return da - db;
+    });
+
+    const districts = Object.entries(districtsMap).map(([id, name]) => ({
+      id,
+      name,
+      key: districtKey(id),
+    }));
+
+    return { series, districts, window_type: payload?.window_type ?? windowType };
+  } catch (err) {
+    console.error("fetchTrendCompare failed:", err);
+    return { series: [], districts: [], window_type: windowType };
+  }
+}
 export async function fetchTrendData(filters = {}) {
   // Real API implementation:
   // try {
@@ -560,3 +630,4 @@ export async function fetchIngestionStatus(jobId) {
 
   return Promise.resolve({ jobId, status: "complete", recordsProcessed: 2341 });
 }
+
