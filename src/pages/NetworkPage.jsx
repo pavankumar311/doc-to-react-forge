@@ -1,24 +1,51 @@
 import { useState, useEffect, useRef } from "react";
+import { RefreshCw } from "lucide-react";
 import GscipCard from "../components/GscipCard";
 import RiskBadge from "../components/RiskBadge";
-import { networkNodes, networkEdges } from "../services/mockData";
+import { fetchNetworkGraph } from "../services/api";
 
 export default function NetworkPage() {
   const [selectedNode, setSelectedNode] = useState(null);
   const [kHops, setKHops] = useState(2);
   const [colorBy, setColorBy] = useState("Risk");
   const [sizeBy, setSizeBy] = useState("Degree");
+  const [networkNodes, setNetworkNodes] = useState([]);
+  const [networkEdges, setNetworkEdges] = useState([]);
+  const [loading, setLoading] = useState(true);
   const svgRef = useRef(null);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const { nodes, edges } = await fetchNetworkGraph({ kHops, colorBy, sizeBy });
+        setNetworkNodes(nodes);
+        setNetworkEdges(edges);
+      } catch (err) {
+        console.error("NetworkPage load error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [kHops, colorBy, sizeBy]);
 
   const tierColor = (tier) => tier === "HIGH" ? "#C62828" : tier === "MED" ? "#F57C00" : tier === "LOW" ? "#2E7D32" : "#546E7A";
 
-  // Arrange nodes in a force-like layout (static positions for demo)
   const positions = {};
   networkNodes.forEach((n, i) => {
     const angle = (i / networkNodes.length) * Math.PI * 2;
     const r = 120 + Math.sin(i * 1.5) * 40;
     positions[n.id] = { x: 250 + Math.cos(angle) * r, y: 220 + Math.sin(angle) * r };
   });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -46,10 +73,8 @@ export default function NetworkPage() {
       </div>
 
       <div className="flex gap-4" style={{ height: "calc(100vh - 200px)" }}>
-        {/* Graph */}
         <div className="flex-1 rounded-lg overflow-hidden relative" style={{ background: "var(--color-bg-app)", border: "1px solid var(--color-border)" }}>
           <svg ref={svgRef} width="100%" height="100%" viewBox="0 0 500 440">
-            {/* Edges */}
             {networkEdges.map((e, i) => {
               const s = positions[e.source];
               const t = positions[e.target];
@@ -61,7 +86,6 @@ export default function NetworkPage() {
                 />
               );
             })}
-            {/* Nodes */}
             {networkNodes.map((n) => {
               const pos = positions[n.id];
               const r = 6 + n.degree * 18;
@@ -77,7 +101,6 @@ export default function NetworkPage() {
           </svg>
         </div>
 
-        {/* Detail */}
         {selectedNode && (
           <div className="w-80 rounded-lg overflow-y-auto" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
             <div className="p-5">

@@ -1,13 +1,46 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { LineChart, Line, BarChart, Bar, ComposedChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ReferenceLine } from "recharts";
-import { Download } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
 import GscipCard from "../components/GscipCard";
-import { trendData, crimeTypes, spikeEvents } from "../services/mockData";
+import { fetchTrendData, fetchCrimeTypes, fetchSpikeEvents } from "../services/api";
 
 export default function TrendsPage() {
   const [granularity, setGranularity] = useState("Daily");
+  const [trendData, setTrendData] = useState([]);
+  const [crimeTypes, setCrimeTypes] = useState([]);
+  const [spikeEvents, setSpikeEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [trends, types, spikes] = await Promise.all([
+          fetchTrendData({ granularity: granularity.toLowerCase() }),
+          fetchCrimeTypes(),
+          fetchSpikeEvents(),
+        ]);
+        setTrendData(trends);
+        setCrimeTypes(types);
+        setSpikeEvents(spikes);
+      } catch (err) {
+        console.error("TrendsPage load error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [granularity]);
 
   const chartTooltipStyle = { background: "#1A2744", border: "1px solid #2A3F6F", borderRadius: 6, fontSize: 12, color: "#F0F4FF" };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -33,7 +66,6 @@ export default function TrendsPage() {
         </div>
       </div>
 
-      {/* District Trend Chart */}
       <GscipCard title="District Crime Trend" className="mb-4">
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={trendData}>
@@ -50,7 +82,6 @@ export default function TrendsPage() {
       </GscipCard>
 
       <div className="grid grid-cols-2 gap-4 mb-4">
-        {/* Rolling 7d/30d */}
         <GscipCard title="Rolling 7D vs 30D">
           <ResponsiveContainer width="100%" height={200}>
             <ComposedChart data={trendData.slice(0, 14)}>
@@ -68,7 +99,6 @@ export default function TrendsPage() {
           </p>
         </GscipCard>
 
-        {/* Spike Detection Timeline */}
         <GscipCard title="Spike Detection Timeline">
           <div className="relative" style={{ height: 200 }}>
             <div className="absolute left-8 right-8 top-1/2 h-0.5" style={{ background: "var(--color-border)" }} />
@@ -90,7 +120,6 @@ export default function TrendsPage() {
         </GscipCard>
       </div>
 
-      {/* Crime Type Breakdown */}
       <GscipCard title="Crime Type Breakdown (Last 30 Days)">
         <div className="flex items-end gap-1 justify-between">
           <ResponsiveContainer width="100%" height={200}>

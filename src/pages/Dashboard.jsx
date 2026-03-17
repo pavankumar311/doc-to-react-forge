@@ -1,9 +1,10 @@
+import { useState, useEffect } from "react";
 import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle, RefreshCw, ArrowRight } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer, Tooltip } from "recharts";
 import { Link } from "react-router-dom";
 import GscipCard from "../components/GscipCard";
 import RiskBadge from "../components/RiskBadge";
-import { kpiData, topRiskBlocks, weeklyTrend, alerts } from "../services/mockData";
+import { fetchKPIs, fetchTopRiskBlocks, fetchWeeklyTrend, fetchAlerts } from "../services/api";
 
 function KpiCard({ label, value, trend, icon }) {
   return (
@@ -23,6 +24,42 @@ function KpiCard({ label, value, trend, icon }) {
 }
 
 export default function Dashboard() {
+  const [kpiData, setKpiData] = useState(null);
+  const [topRiskBlocks, setTopRiskBlocks] = useState([]);
+  const [weeklyTrend, setWeeklyTrend] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [kpis, blocks, trend, alertList] = await Promise.all([
+        fetchKPIs(),
+        fetchTopRiskBlocks(),
+        fetchWeeklyTrend(),
+        fetchAlerts(),
+      ]);
+      setKpiData(kpis);
+      setTopRiskBlocks(blocks);
+      setWeeklyTrend(trend);
+      setAlerts(alertList);
+    } catch (err) {
+      console.error("Dashboard load error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  if (loading || !kpiData) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -30,7 +67,7 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>Dashboard Overview</h1>
           <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>Last updated: 2h ago</p>
         </div>
-        <button className="flex items-center gap-2 h-9 px-4 rounded text-xs font-medium transition-colors" style={{ color: "var(--color-azure)", border: "1px solid var(--color-border)" }}>
+        <button onClick={loadData} className="flex items-center gap-2 h-9 px-4 rounded text-xs font-medium transition-colors" style={{ color: "var(--color-azure)", border: "1px solid var(--color-border)" }}>
           <RefreshCw size={14} /> Refresh
         </button>
       </div>
@@ -64,11 +101,9 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
-        {/* Mini Heatmap placeholder */}
         <Link to="/heatmap">
           <GscipCard title="Risk Heatmap" subtitle="Click to explore full map" interactive>
             <div className="relative rounded overflow-hidden" style={{ height: 240, background: "linear-gradient(135deg, #0D1117 0%, #1A2744 50%, #0F1F3D 100%)" }}>
-              {/* Simulated heatmap */}
               {topRiskBlocks.map((b, i) => (
                 <div
                   key={b.id}
@@ -92,7 +127,6 @@ export default function Dashboard() {
           </GscipCard>
         </Link>
 
-        {/* Top 5 Risk Blocks */}
         <GscipCard title="Top 5 High-Risk Blocks">
           <div className="space-y-3">
             {topRiskBlocks.map((block, i) => (
@@ -116,7 +150,6 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        {/* 7-Day Trend */}
         <GscipCard title="7-Day Crime Trend">
           <ResponsiveContainer width="100%" height={120}>
             <LineChart data={weeklyTrend}>
@@ -132,7 +165,6 @@ export default function Dashboard() {
           </Link>
         </GscipCard>
 
-        {/* Recent Alerts */}
         <GscipCard title="Recent Alerts">
           <div className="space-y-3">
             {alerts.slice(0, 4).map((a) => (

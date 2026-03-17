@@ -1,17 +1,42 @@
-import { useState } from "react";
-import { AlertTriangle, CheckCircle, Download } from "lucide-react";
-import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from "recharts";
+import { useState, useEffect } from "react";
+import { AlertTriangle, CheckCircle, Download, RefreshCw } from "lucide-react";
 import GscipCard from "../components/GscipCard";
-import { biasData, biasPerCrimeType } from "../services/mockData";
+import { fetchBiasData } from "../services/api";
 
 export default function FairnessPage() {
   const [threshold, setThreshold] = useState(15);
+  const [biasData, setBiasData] = useState([]);
+  const [biasPerCrimeType, setBiasPerCrimeType] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const data = await fetchBiasData({ threshold });
+        setBiasData(data.byDistrict);
+        setBiasPerCrimeType(data.byCrimeType);
+      } catch (err) {
+        console.error("FairnessPage load error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [threshold]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
+      </div>
+    );
+  }
+
   const flaggedCount = biasData.filter((d) => d.flagged).length + biasPerCrimeType.filter((d) => d.flagged).length;
-  const chartTooltipStyle = { background: "#1A2744", border: "1px solid #2A3F6F", borderRadius: 6, fontSize: 12, color: "#F0F4FF" };
 
   return (
     <div>
-      {/* Disparity banner */}
       {flaggedCount > 0 && (
         <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-lg" style={{ background: "rgba(245,124,0,0.15)", border: "1px solid rgba(245,124,0,0.3)" }}>
           <AlertTriangle size={16} style={{ color: "#F57C00" }} />
@@ -29,7 +54,6 @@ export default function FairnessPage() {
         </button>
       </div>
 
-      {/* Prediction Error by District */}
       <GscipCard title="Prediction Error by District" className="mb-4">
         <div className="space-y-3">
           {biasData.map((d) => (
@@ -57,7 +81,6 @@ export default function FairnessPage() {
       </GscipCard>
 
       <div className="grid grid-cols-2 gap-4">
-        {/* Error by Crime Type */}
         <GscipCard title="Error by Crime Type">
           <div className="space-y-3">
             {biasPerCrimeType.map((c) => (
@@ -76,7 +99,6 @@ export default function FairnessPage() {
           </div>
         </GscipCard>
 
-        {/* Threshold Config */}
         <GscipCard title="Disparity Threshold Config">
           <div className="space-y-4">
             <div>

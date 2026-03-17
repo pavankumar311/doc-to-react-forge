@@ -1,12 +1,14 @@
-import { useState } from "react";
-import { MapPin, Layers, Download } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Layers, Download, RefreshCw } from "lucide-react";
 import GscipCard from "../components/GscipCard";
 import RiskBadge from "../components/RiskBadge";
-import { topRiskBlocks, shapFeatures } from "../services/mockData";
+import { fetchHeatmapData, fetchSHAPFeatures } from "../services/api";
 
 export default function Heatmap() {
   const [selectedBlock, setSelectedBlock] = useState(null);
   const [layers, setLayers] = useState({ districts: true, community: false, beats: false });
+  const [shapFeatures, setShapFeatures] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const blocks = [
     { id: "047W", x: 35, y: 30, risk: 0.87, tier: "HIGH", address: "047W Madison St" },
@@ -19,7 +21,33 @@ export default function Heatmap() {
     { id: "B008", x: 20, y: 65, risk: 0.28, tier: "LOW", address: "020W Pershing Rd" },
   ];
 
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [, shap] = await Promise.all([
+          fetchHeatmapData(),
+          fetchSHAPFeatures("v2.1"),
+        ]);
+        setShapFeatures(shap);
+      } catch (err) {
+        console.error("HeatmapPage load error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
   const tierColor = (tier) => tier === "HIGH" ? "#C62828" : tier === "MED" ? "#F57C00" : "#2E7D32";
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw size={24} className="animate-spin" style={{ color: "var(--color-azure)" }} />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -36,18 +64,14 @@ export default function Heatmap() {
       </div>
 
       <div className="flex gap-4" style={{ height: "calc(100vh - 200px)" }}>
-        {/* Map area */}
         <div className="flex-1 relative rounded-lg overflow-hidden" style={{ background: "#0a0e17", border: "1px solid var(--color-border)" }}>
-          {/* Simulated dark map */}
           <svg width="100%" height="100%" viewBox="0 0 100 100" className="absolute inset-0">
-            {/* Grid lines */}
             {[20, 40, 60, 80].map((v) => (
               <g key={v}>
                 <line x1={v} y1="0" x2={v} y2="100" stroke="#1A2744" strokeWidth="0.3" />
                 <line x1="0" y1={v} x2="100" y2={v} stroke="#1A2744" strokeWidth="0.3" />
               </g>
             ))}
-            {/* Block polygons */}
             {blocks.map((b) => (
               <g key={b.id} onClick={() => setSelectedBlock(b)} className="cursor-pointer">
                 <rect
@@ -60,7 +84,6 @@ export default function Heatmap() {
             ))}
           </svg>
 
-          {/* Legend */}
           <div className="absolute bottom-4 right-4 rounded-lg p-3" style={{ background: "rgba(26,39,68,0.9)", border: "1px solid var(--color-border)" }}>
             <p className="text-[10px] font-semibold uppercase mb-2" style={{ color: "var(--color-text-secondary)" }}>Legend</p>
             {[{ tier: "HIGH", label: "High (≥0.7)" }, { tier: "MED", label: "Med (0.3–0.69)" }, { tier: "LOW", label: "Low (<0.3)" }].map((l) => (
@@ -72,7 +95,6 @@ export default function Heatmap() {
           </div>
         </div>
 
-        {/* Detail panel */}
         {selectedBlock && (
           <div className="w-80 rounded-lg overflow-y-auto" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
             <div className="p-5">
