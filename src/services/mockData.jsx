@@ -109,6 +109,15 @@ export const suggestedPrompts = ["Show spike alerts for this month", "Compare Di
 
 export const networkNodes = [
   { id: "047W", label: "047W Madison", risk: 0.87, tier: "HIGH", degree: 0.82, community: 3, lat: 17.361431, lng: 78.474533 },
+  { id: "049W", label: "049W Madison", risk: 0.65, tier: "MED", degree: 0.54, community: 3, lat: 41.7815, lng: -87.6652 },
+  { id: "045W", label: "045W Madison", risk: 0.54, tier: "MED", degree: 0.45, community: 3, lat: 41.7786, lng: -87.6668 },
+  { id: "047E", label: "047E Madison", risk: 0.71, tier: "HIGH", degree: 0.68, community: 3, lat: 41.7804, lng: -87.6587 },
+  { id: "063E", label: "063E 79th St", risk: 0.74, tier: "HIGH", degree: 0.71, community: 5, lat: 41.7472, lng: -87.5938 },
+  { id: "061E", label: "061E 79th St", risk: 0.42, tier: "MED", degree: 0.38, community: 5, lat: 41.7458, lng: -87.6031 },
+  { id: "025N", label: "025N Kedzie", risk: 0.71, tier: "HIGH", degree: 0.62, community: 2, lat: 41.8553, lng: -87.7037 },
+  { id: "023N", label: "023N Kedzie", risk: 0.48, tier: "MED", degree: 0.35, community: 2, lat: 41.8591, lng: -87.7048 },
+  { id: "011W", label: "011W 51st St", risk: 0.68, tier: "MED", degree: 0.51, community: 4, lat: 41.7971, lng: -87.6689 },
+  { id: "033S", label: "033S Ashland", risk: 0.65, tier: "MED", degree: 0.44, community: 4, lat: 41.8320, lng: -87.6663 },
 ];
 
 export const networkEdges = [

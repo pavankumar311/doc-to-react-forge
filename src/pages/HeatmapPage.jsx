@@ -1,25 +1,32 @@
 import { useState, useEffect } from "react";
 import { Layers, Download, RefreshCw } from "lucide-react";
-import GscipCard from "../components/GscipCard";
+import { MapContainer, TileLayer, CircleMarker, Tooltip } from "react-leaflet";
 import RiskBadge from "../components/RiskBadge";
 import { fetchHeatmapData, fetchSHAPFeatures } from "../services/api";
 
+const blocks = [
+  { id: "047W", lat: 41.884, lng: -87.624, risk: 0.87, tier: "HIGH", address: "047W Madison St" },
+  { id: "063E", lat: 41.773, lng: -87.566, risk: 0.74, tier: "HIGH", address: "063E 79th St" },
+  { id: "025N", lat: 41.814, lng: -87.659, risk: 0.71, tier: "HIGH", address: "025N Kedzie Ave" },
+  { id: "011W", lat: 41.796, lng: -87.613, risk: 0.68, tier: "MED", address: "011W 51st St" },
+  { id: "033S", lat: 41.880, lng: -87.664, risk: 0.65, tier: "MED", address: "033S Ashland Ave" },
+  { id: "B006", lat: 41.885, lng: -87.640, risk: 0.42, tier: "MED", address: "055W Lake St" },
+  { id: "B007", lat: 41.789, lng: -87.601, risk: 0.31, tier: "LOW", address: "070E Garfield Blvd" },
+  { id: "B008", lat: 41.794, lng: -87.707, risk: 0.28, tier: "LOW", address: "020W Pershing Rd" },
+];
+
+const legend = [
+  { tier: "HIGH", label: "High (≥ 0.7)" },
+  { tier: "MED", label: "Med (0.3 – 0.69)" },
+  { tier: "LOW", label: "Low (< 0.3)" },
+];
+
+const mapCenter = [41.84, -87.63];
+
 export default function Heatmap() {
   const [selectedBlock, setSelectedBlock] = useState(null);
-  const [layers, setLayers] = useState({ districts: true, community: false, beats: false });
   const [shapFeatures, setShapFeatures] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const blocks = [
-    { id: "047W", x: 35, y: 30, risk: 0.87, tier: "HIGH", address: "047W Madison St" },
-    { id: "063E", x: 65, y: 55, risk: 0.74, tier: "HIGH", address: "063E 79th St" },
-    { id: "025N", x: 25, y: 45, risk: 0.71, tier: "HIGH", address: "025N Kedzie Ave" },
-    { id: "011W", x: 50, y: 70, risk: 0.68, tier: "MED", address: "011W 51st St" },
-    { id: "033S", x: 45, y: 50, risk: 0.65, tier: "MED", address: "033S Ashland Ave" },
-    { id: "B006", x: 55, y: 25, risk: 0.42, tier: "MED", address: "055W Lake St" },
-    { id: "B007", x: 70, y: 40, risk: 0.31, tier: "LOW", address: "070E Garfield Blvd" },
-    { id: "B008", x: 20, y: 65, risk: 0.28, tier: "LOW", address: "020W Pershing Rd" },
-  ];
 
   useEffect(() => {
     const load = async () => {
@@ -64,32 +71,41 @@ export default function Heatmap() {
       </div>
 
       <div className="flex gap-4" style={{ height: "calc(100vh - 200px)" }}>
-        <div className="flex-1 relative rounded-lg overflow-hidden" style={{ background: "#0a0e17", border: "1px solid var(--color-border)" }}>
-          <svg width="100%" height="100%" viewBox="0 0 100 100" className="absolute inset-0">
-            {[20, 40, 60, 80].map((v) => (
-              <g key={v}>
-                <line x1={v} y1="0" x2={v} y2="100" stroke="#1A2744" strokeWidth="0.3" />
-                <line x1="0" y1={v} x2="100" y2={v} stroke="#1A2744" strokeWidth="0.3" />
-              </g>
+        <div className="flex-1 relative rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)", minHeight: "420px" }}>
+          <MapContainer center={mapCenter} zoom={12} scrollWheelZoom className="h-full w-full" style={{ background: "#0a0e17" }}>
+            <TileLayer
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution="© OpenStreetMap contributors"
+            />
+            {blocks.map((block) => (
+              <CircleMarker
+                key={block.id}
+                center={[block.lat, block.lng]}
+                radius={8 + block.risk * 18}
+                pathOptions={{
+                  color: tierColor(block.tier),
+                  fillColor: tierColor(block.tier),
+                  fillOpacity: 0.35,
+                  weight: 2,
+                }}
+                eventHandlers={{ click: () => setSelectedBlock(block) }}
+              >
+                <Tooltip direction="top" offset={[0, -12]} opacity={1}>
+                  <div className="text-xs font-semibold">
+                    {block.id} · {block.address}
+                  </div>
+                  <div className="text-[10px] tracking-wide">Risk: {block.risk.toFixed(2)}</div>
+                </Tooltip>
+              </CircleMarker>
             ))}
-            {blocks.map((b) => (
-              <g key={b.id} onClick={() => setSelectedBlock(b)} className="cursor-pointer">
-                <rect
-                  x={b.x - 5} y={b.y - 4} width={10} height={8} rx={1}
-                  fill={tierColor(b.tier)} fillOpacity={0.65} stroke="#2A3F6F" strokeWidth={0.3}
-                />
-                <circle cx={b.x} cy={b.y} r={b.risk * 12} fill={tierColor(b.tier)} fillOpacity={0.2} />
-                <text x={b.x} y={b.y + 10} textAnchor="middle" fill="#8899BB" fontSize="2.5">{b.id}</text>
-              </g>
-            ))}
-          </svg>
+          </MapContainer>
 
           <div className="absolute bottom-4 right-4 rounded-lg p-3" style={{ background: "rgba(26,39,68,0.9)", border: "1px solid var(--color-border)" }}>
             <p className="text-[10px] font-semibold uppercase mb-2" style={{ color: "var(--color-text-secondary)" }}>Legend</p>
-            {[{ tier: "HIGH", label: "High (≥0.7)" }, { tier: "MED", label: "Med (0.3–0.69)" }, { tier: "LOW", label: "Low (<0.3)" }].map((l) => (
-              <div key={l.tier} className="flex items-center gap-2 mb-1">
-                <div className="w-3 h-3 rounded-sm" style={{ background: tierColor(l.tier) }} />
-                <span className="text-[10px]" style={{ color: "var(--color-text-primary)" }}>{l.label}</span>
+            {legend.map((entry) => (
+              <div key={entry.tier} className="flex items-center gap-2 mb-1">
+                <div className="w-3 h-3 rounded-sm" style={{ background: tierColor(entry.tier) }} />
+                <span className="text-[10px]" style={{ color: "var(--color-text-primary)" }}>{entry.label}</span>
               </div>
             ))}
           </div>
