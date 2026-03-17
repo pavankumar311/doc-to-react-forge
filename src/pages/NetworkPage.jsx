@@ -1,8 +1,24 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { RefreshCw } from "lucide-react";
 import GscipCard from "../components/GscipCard";
 import RiskBadge from "../components/RiskBadge";
 import { fetchNetworkGraph } from "../services/api";
+import { MapContainer, TileLayer, CircleMarker, Polyline, Popup, useMap } from "react-leaflet";
+
+function MapBounds({ bounds, focusNode }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map) return;
+    if (focusNode) {
+      map.setView([focusNode.lat, focusNode.lng], 14, { animate: true });
+    } else if (bounds && bounds.length) {
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+    }
+  }, [map, bounds, focusNode]);
+
+  return null;
+}
 
 export default function NetworkPage() {
   const [selectedNode, setSelectedNode] = useState(null);
@@ -12,7 +28,14 @@ export default function NetworkPage() {
   const [networkNodes, setNetworkNodes] = useState([]);
   const [networkEdges, setNetworkEdges] = useState([]);
   const [loading, setLoading] = useState(true);
-  const svgRef = useRef(null);
+  const nodesById = useMemo(
+    () => Object.fromEntries(networkNodes.map((n) => [n.id, n])),
+    [networkNodes],
+  );
+  const bounds = useMemo(
+    () => (networkNodes.length ? networkNodes.map((n) => [n.lat, n.lng]) : null),
+    [networkNodes],
+  );
 
   useEffect(() => {
     const load = async () => {
@@ -31,13 +54,6 @@ export default function NetworkPage() {
   }, [kHops, colorBy, sizeBy]);
 
   const tierColor = (tier) => tier === "HIGH" ? "#C62828" : tier === "MED" ? "#F57C00" : tier === "LOW" ? "#2E7D32" : "#546E7A";
-
-  const positions = {};
-  networkNodes.forEach((n, i) => {
-    const angle = (i / networkNodes.length) * Math.PI * 2;
-    const r = 120 + Math.sin(i * 1.5) * 40;
-    positions[n.id] = { x: 250 + Math.cos(angle) * r, y: 220 + Math.sin(angle) * r };
-  });
 
   if (loading) {
     return (
@@ -74,31 +90,62 @@ export default function NetworkPage() {
 
       <div className="flex gap-4" style={{ height: "calc(100vh - 200px)" }}>
         <div className="flex-1 rounded-lg overflow-hidden relative" style={{ background: "var(--color-bg-app)", border: "1px solid var(--color-border)" }}>
-          <svg ref={svgRef} width="100%" height="100%" viewBox="0 0 500 440">
-            {networkEdges.map((e, i) => {
-              const s = positions[e.source];
-              const t = positions[e.target];
-              if (!s || !t) return null;
+          <MapContainer
+            className="h-full w-full"
+            bounds={bounds || undefined}
+            center={[41.78, -87.66]}
+            zoom={12}
+            scrollWheelZoom
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <MapBounds bounds={bounds} focusNode={selectedNode} />
+            {networkEdges.map((edge, idx) => {
+              const source = nodesById[edge.source];
+              const target = nodesById[edge.target];
+              if (!source || !target) return null;
               return (
-                <line key={i} x1={s.x} y1={s.y} x2={t.x} y2={t.y}
-                  stroke={e.sameCommunity ? "rgba(21,101,192,0.6)" : "rgba(74,88,128,0.4)"}
-                  strokeWidth={Math.log(e.weight + 1) * 1.5}
+                <Polyline
+                  key={`edge-${idx}`}
+                  positions={[[source.lat, source.lng], [target.lat, target.lng]]}
+                  pathOptions={{
+                    color: edge.sameCommunity ? "rgba(21,101,192,0.7)" : "rgba(74,88,128,0.6)",
+                    weight: Math.log(edge.weight + 1) * 2,
+                    opacity: 0.8,
+                  }}
                 />
               );
             })}
-            {networkNodes.map((n) => {
-              const pos = positions[n.id];
-              const r = 6 + n.degree * 18;
-              const isSelected = selectedNode?.id === n.id;
+            {networkNodes.map((node) => {
+              const isSelected = selectedNode?.id === node.id;
               return (
-                <g key={n.id} onClick={() => setSelectedNode(n)} className="cursor-pointer">
-                  {isSelected && <circle cx={pos.x} cy={pos.y} r={r + 6} fill="none" stroke={tierColor(n.tier)} strokeWidth={2} opacity={0.5} />}
-                  <circle cx={pos.x} cy={pos.y} r={r} fill={tierColor(n.tier)} fillOpacity={0.8} stroke={isSelected ? "#F0F4FF" : "none"} strokeWidth={2} />
-                  <text x={pos.x} y={pos.y + r + 12} textAnchor="middle" fill="#8899BB" fontSize="9" fontFamily="IBM Plex Mono">{n.id}</text>
-                </g>
+                <CircleMarker
+                  key={node.id}
+                  center={[node.lat, node.lng]}
+                  radius={6 + node.degree * 8}
+                  pathOptions={{
+                    color: isSelected ? "#F0F4FF" : tierColor(node.tier),
+                    fillColor: tierColor(node.tier),
+                    fillOpacity: 0.9,
+                    weight: isSelected ? 3 : 1,
+                  }}
+                  eventHandlers={{
+                    click: () => setSelectedNode(node),
+                  }}
+                >
+                  <Popup>
+                    <div className="text-xs">
+                      <div className="font-semibold" style={{ color: "var(--color-text-primary)" }}>{node.label}</div>
+                      <div>Risk: {node.risk}</div>
+                      <div>Community {node.community}</div>
+                    </div>
+                  </Popup>
+                </CircleMarker>
               );
             })}
-          </svg>
+          </MapContainer>
         </div>
 
         {selectedNode && (

@@ -11,9 +11,9 @@ const defaultFilters = {
   riskTiers: [],
 };
 
-const DISTRICT_OPTIONS = ["District 7", "District 8", "District 11", "District 14"];
-const CRIME_TYPE_OPTIONS = ["Theft", "Assault", "Burglary", "Battery", "Robbery"];
-const RISK_TIER_OPTIONS = ["HIGH", "MED", "LOW"];
+const DEFAULT_DISTRICT_OPTIONS = ["District 7", "District 8", "District 11", "District 14"];
+const DEFAULT_CRIME_TYPE_OPTIONS = ["Theft", "Assault", "Burglary", "Battery", "Robbery"];
+const DEFAULT_RISK_TIER_OPTIONS = ["HIGH", "MED", "LOW"];
 
 function parseArrayParam(value) {
   if (!value) return [];
@@ -60,6 +60,9 @@ export function FilterProvider({ children }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState(() => filtersFromParams(searchParams));
   const [pendingFilters, setPendingFilters] = useState(() => filtersFromParams(searchParams));
+  const [districtOptions, setDistrictOptions] = useState(DEFAULT_DISTRICT_OPTIONS);
+  const [crimeTypeOptions, setCrimeTypeOptions] = useState(DEFAULT_CRIME_TYPE_OPTIONS);
+  const [riskTierOptions, setRiskTierOptions] = useState(DEFAULT_RISK_TIER_OPTIONS);
 
   const hasChanges = useMemo(
     () => JSON.stringify(pendingFilters) !== JSON.stringify(filters),
@@ -91,6 +94,43 @@ export function FilterProvider({ children }) {
     setSearchParams({}, { replace: true });
   }, [setSearchParams]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadOptions = async () => {
+      try {
+        const res = await fetch("http://localhost:6000/api/v1/dashoard/filters", {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`, // adjust if needed
+          },
+        });
+
+        if (!res.ok) throw new Error("Failed to fetch filters");
+
+        const data = await res.json();
+        const districts = data?.districts?.map(d => d.district_name) || DEFAULT_DISTRICT_OPTIONS;
+        const crimeTypes = data?.crime_types?.map(c => c.primary_type) || DEFAULT_CRIME_TYPE_OPTIONS;
+
+        // ✅ Set state
+        setDistrictOptions(districts);
+        setCrimeTypeOptions(crimeTypes);
+        setRiskTierOptions(data?.riskTiers || DEFAULT_RISK_TIER_OPTIONS);
+      } catch (err) {
+        console.error("Filter API error:", err);
+
+        // fallback to defaults on failure
+        setDistrictOptions(DEFAULT_DISTRICT_OPTIONS);
+        setCrimeTypeOptions(DEFAULT_CRIME_TYPE_OPTIONS);
+        setRiskTierOptions(DEFAULT_RISK_TIER_OPTIONS);
+      }
+    };
+
+    loadOptions();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Sync from URL on popstate / external changes
   useEffect(() => {
     const fromUrl = filtersFromParams(searchParams);
@@ -109,9 +149,9 @@ export function FilterProvider({ children }) {
         togglePendingArrayItem,
         applyFilters,
         clearFilters,
-        DISTRICT_OPTIONS,
-        CRIME_TYPE_OPTIONS,
-        RISK_TIER_OPTIONS,
+        DISTRICT_OPTIONS: districtOptions,
+        CRIME_TYPE_OPTIONS: crimeTypeOptions,
+        RISK_TIER_OPTIONS: riskTierOptions,
       }}
     >
       {children}
