@@ -36,7 +36,7 @@ import {
 // const API_KEY = process.env.REACT_APP_GSCIP_API_KEY || "";
 const DASHBOARD_API_BASE = "http://localhost:9000/api/v1/dashboard";
 export const AUTH_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3MzcyNzYyOSwgImV4cCI6IDE3NzM4MTQwMjl9.sfJHNjwQefkaIQuyASBjGgj7-UkGjIeWCZ8Xg69t-eE";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3MzgyNTMwOCwgImV4cCI6IDE3NzM5MTE3MDh9.von1K4_3dXl-0nnVrAt9qk6AIt4zWcUVdFzyq_520gQ";
 
 function normalizeDistrictId(value) {
   if (value == null) return "";
