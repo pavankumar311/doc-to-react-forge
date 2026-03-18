@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useMemo, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import { AUTH_TOKEN } from "../services/api";
 
 const FilterContext = createContext(null);
 
@@ -197,7 +198,7 @@ export function FilterProvider({ children }) {
         const url = buildSummaryUrl(nextFilters, districtIdByName, crimeTypeIdByName);
         const res = await fetch(url, {
           headers: {
-            Authorization: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3MzcyNzYyOSwgImV4cCI6IDE3NzM4MTQwMjl9.sfJHNjwQefkaIQuyASBjGgj7-UkGjIeWCZ8Xg69t-eE`,
+            Authorization: `Bearer ${AUTH_TOKEN}`,
           },
         });
         if (!res.ok) throw new Error(`Summary fetch failed: ${res.status}`);
@@ -217,7 +218,7 @@ export function FilterProvider({ children }) {
       try {
         const res = await fetch("http://localhost:9000/api/v1/dashboard/filters", {
           headers: {
-            Authorization: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3MzcyNzYyOSwgImV4cCI6IDE3NzM4MTQwMjl9.sfJHNjwQefkaIQuyASBjGgj7-UkGjIeWCZ8Xg69t-eE`, // adjust if needed
+            Authorization: `Bearer ${AUTH_TOKEN}`, // adjust if needed
           },
         });
 

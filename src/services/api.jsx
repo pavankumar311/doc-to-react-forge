@@ -35,7 +35,7 @@ import {
 // const API_BASE_URL = "https://api.gscip.gov/v1";
 // const API_KEY = process.env.REACT_APP_GSCIP_API_KEY || "";
 const DASHBOARD_API_BASE = "http://localhost:9000/api/v1/dashboard";
-const DASHBOARD_AUTH_TOKEN =
+export const AUTH_TOKEN =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3MzcyNzYyOSwgImV4cCI6IDE3NzM4MTQwMjl9.sfJHNjwQefkaIQuyASBjGgj7-UkGjIeWCZ8Xg69t-eE";
 
 function normalizeDistrictId(value) {
@@ -158,7 +158,7 @@ export async function fetchTopRiskBlocks({ filters, limit = 5, districtIdByName,
     const url = buildTopRiskBlocksUrl({ filters, limit, districtIdByName, crimeTypeIdByName });
     const res = await fetch(url, {
       headers: {
-        Authorization: `Bearer ${DASHBOARD_AUTH_TOKEN}`,
+        Authorization: `Bearer ${AUTH_TOKEN}`,
       },
     });
     if (!res.ok) throw new Error(`Top risk blocks fetch failed: ${res.status}`);
@@ -239,7 +239,7 @@ export async function fetchTrendCompare({ filters, windowType = "month", distric
     const url = buildTrendCompareUrl({ filters, windowType, districtIdByName });
     const res = await fetch(url, {
       headers: {
-        Authorization: `Bearer ${DASHBOARD_AUTH_TOKEN}`,
+        Authorization: `Bearer ${AUTH_TOKEN}`,
       },
     });
     if (!res.ok) throw new Error(`Trend compare fetch failed: ${res.status}`);
@@ -290,7 +290,7 @@ export async function fetchRollingTrend({ filters } = {}) {
     const url = buildRollingTrendUrl({ filters });
     const res = await fetch(url, {
       headers: {
-        Authorization: `Bearer ${DASHBOARD_AUTH_TOKEN}`,
+        Authorization: `Bearer ${AUTH_TOKEN}`,
       },
     });
     if (!res.ok) throw new Error(`Rolling trend fetch failed: ${res.status}`);
