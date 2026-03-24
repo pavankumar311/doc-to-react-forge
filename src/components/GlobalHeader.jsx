@@ -5,9 +5,15 @@ import { useNavigate } from "react-router-dom";
 import { alerts } from "../services/mockData";
 
 export default function GlobalHeader() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const navigate = useNavigate();
+
+  const handleSignOut = () => {
+    logout();
+    navigate("/login");
+  };
 
   return (
     <header
