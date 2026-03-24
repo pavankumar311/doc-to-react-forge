@@ -80,7 +80,6 @@ export default function GlobalHeader() {
               <button onClick={handleSignOut} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm transition-colors hover:bg-gscip-card" style={{ color: "var(--color-risk-high)", borderTop: "1px solid var(--color-border)" }}>
                 <LogOut size={14} /> Sign Out
               </button>
-              </button>
             </div>
           )}
         </div>
