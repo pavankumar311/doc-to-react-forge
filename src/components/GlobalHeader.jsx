@@ -1,6 +1,7 @@
 import { useAuth } from "../contexts/AuthContext";
 import { Bell, ChevronDown, LogOut, Settings, User } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { alerts } from "../services/mockData";
 
 export default function GlobalHeader() {
