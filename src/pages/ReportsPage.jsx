@@ -1,23 +1,41 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Download, Share2, Plus } from "lucide-react";
 import GscipCard from "../components/GscipCard";
 import { ReportsSkeleton } from "../components/Skeletons";
-import { fetchReports, generateReport } from "../services/api";
+import { downloadReport, fetchReports, fetchReportStatus, generateReport } from "../services/api";
+import { useFilters } from "../contexts/FilterContext";
 
-const reportTypes = ["Crime Risk PDF", "Weekly Summary", "District Compare", "Model Audit", "CSV Export"];
+const reportTypes = ["Crime Risk PDF", "Weekly Summary", "District Compare", "CSV Export"];
 
 export default function ReportsPage() {
+  const { filters, DISTRICT_OPTIONS, CRIME_TYPE_OPTIONS, districtIdByName, crimeTypeIdByName } = useFilters();
   const [selectedType, setSelectedType] = useState("Crime Risk PDF");
   const [generating, setGenerating] = useState(false);
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedDistrict, setSelectedDistrict] = useState("");
+  const [selectedDistricts, setSelectedDistricts] = useState([]);
+  const [selectedCrimeType, setSelectedCrimeType] = useState("");
+  const reportsRef = useRef(reports);
+
+  const dateRangeLabel = useMemo(() => {
+    if (!filters?.dateFrom || !filters?.dateTo) return "Select range";
+    return `${filters.dateFrom} - ${filters.dateTo}`;
+  }, [filters?.dateFrom, filters?.dateTo]);
+
+  const toDistrictId = (name) =>
+    districtIdByName?.[name] || name.replace(/\D/g, "").padStart(3, "0");
+
+  useEffect(() => {
+    reportsRef.current = reports;
+  }, [reports]);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
         const data = await fetchReports();
-        setReports(data);
+        setReports(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("ReportsPage load error:", err);
       } finally {
@@ -30,17 +48,49 @@ export default function ReportsPage() {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      const result = await generateReport({ type: selectedType, district: "8" });
-      console.log("Report generated:", result);
-      // Reload reports list after generation
+      const districtIds = selectedType === "District Compare"
+        ? selectedDistricts.map((d) => toDistrictId(d)).filter(Boolean)
+        : (selectedDistrict ? [toDistrictId(selectedDistrict)] : []);
+      const crimeTypeId = selectedCrimeType ? selectedCrimeType : null;
+
+      const payload = {
+        type: selectedType,
+        date_from: filters?.dateFrom,
+        date_to: filters?.dateTo,
+        district_ids: districtIds,
+        crime_type_ids: crimeTypeId ? [crimeTypeId] : [],
+      };
+
+      await generateReport(payload);
       const updated = await fetchReports();
-      setReports(updated);
+      setReports(Array.isArray(updated) ? updated : []);
     } catch (err) {
       console.error("Report generation error:", err);
     } finally {
       setGenerating(false);
     }
   };
+
+  useEffect(() => {
+    const pollStatuses = async () => {
+      const pending = reportsRef.current.filter((r) => r.status === "queued");
+      if (!pending.length) return;
+      try {
+        const updates = await Promise.all(
+          pending.map((r) => fetchReportStatus(r.report_id || r.id))
+        );
+        const updatesById = new Map(updates.map((u) => [u.report_id || u.id, u]));
+        setReports((prev) =>
+          prev.map((r) => updatesById.get(r.report_id || r.id) || r)
+        );
+      } catch (err) {
+        console.error("Report status polling error:", err);
+      }
+    };
+
+    const interval = setInterval(pollStatuses, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   if (loading) {
     return <ReportsSkeleton />;
@@ -83,22 +133,62 @@ export default function ReportsPage() {
             <div className="space-y-3">
               <div>
                 <label className="text-[11px] uppercase font-semibold block mb-1" style={{ color: "var(--color-text-muted)" }}>District</label>
-                <select className="w-full h-8 px-2 rounded text-xs" style={{ background: "var(--color-bg-sidebar)", color: "var(--color-text-primary)", border: "1px solid var(--color-border)" }}>
-                  <option>District 8</option>
-                  <option>District 7</option>
-                  <option>District 11</option>
-                </select>
+                {selectedType === "District Compare" ? (
+                  <div className="max-h-40 overflow-y-auto rounded p-2 space-y-1" style={{ background: "var(--color-bg-sidebar)", border: "1px solid var(--color-border)" }}>
+                    {DISTRICT_OPTIONS.map((d) => {
+                      const active = selectedDistricts.includes(d);
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setSelectedDistricts((prev) => active ? prev.filter((x) => x !== d) : [...prev, d])}
+                          className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-left"
+                          style={{
+                            color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                            background: active ? "rgba(21,101,192,0.15)" : "transparent",
+                          }}
+                        >
+                          <span className="inline-block w-2.5 h-2.5 rounded-full border" style={{
+                            borderColor: active ? "var(--color-cobalt)" : "var(--color-border)",
+                            background: active ? "var(--color-cobalt)" : "transparent",
+                          }} />
+                          {d}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <select
+                    value={selectedDistrict}
+                    onChange={(e) => setSelectedDistrict(e.target.value)}
+                    className="w-full h-8 px-2 rounded text-xs"
+                    style={{ background: "var(--color-bg-sidebar)", color: "var(--color-text-primary)", border: "1px solid var(--color-border)" }}
+                  >
+                    <option value="">All</option>
+                    {DISTRICT_OPTIONS.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="text-[11px] uppercase font-semibold block mb-1" style={{ color: "var(--color-text-muted)" }}>Date Range</label>
                 <div className="h-8 px-2 rounded text-xs flex items-center" style={{ background: "var(--color-bg-sidebar)", color: "var(--color-text-primary)", border: "1px solid var(--color-border)" }}>
-                  Feb 1 — Feb 27
+                  {dateRangeLabel}
                 </div>
               </div>
               <div>
                 <label className="text-[11px] uppercase font-semibold block mb-1" style={{ color: "var(--color-text-muted)" }}>Crime Type</label>
-                <select className="w-full h-8 px-2 rounded text-xs" style={{ background: "var(--color-bg-sidebar)", color: "var(--color-text-primary)", border: "1px solid var(--color-border)" }}>
-                  <option>All</option>
+                <select
+                  value={selectedCrimeType}
+                  onChange={(e) => setSelectedCrimeType(e.target.value)}
+                  className="w-full h-8 px-2 rounded text-xs"
+                  style={{ background: "var(--color-bg-sidebar)", color: "var(--color-text-primary)", border: "1px solid var(--color-border)" }}
+                >
+                  <option value="">All</option>
+                  {CRIME_TYPE_OPTIONS.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
                 </select>
               </div>
               <button onClick={handleGenerate} disabled={generating} className="w-full h-9 rounded text-xs font-semibold" style={{
@@ -121,21 +211,33 @@ export default function ReportsPage() {
           <GscipCard title="Recent Reports">
             <div className="space-y-3">
               {reports.map((r) => (
-                <div key={r.id} className="p-4 rounded-lg transition-colors hover:bg-gscip-surface" style={{ border: "1px solid var(--color-border)" }}>
+                <div key={r.report_id || r.id} className="p-4 rounded-lg transition-colors hover:bg-gscip-surface" style={{ border: "1px solid var(--color-border)" }}>
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3">
                       <FileText size={20} style={{ color: "var(--color-azure)" }} className="mt-0.5" />
                       <div>
-                        <h3 className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>{r.name}</h3>
+                        <h3 className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>{r.type || r.name}</h3>
                         <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
-                          Districts: {r.districts} | {r.auto ? "Auto-generated" : `By: ${r.by}`}
+                          Districts: {Array.isArray(r.districts) ? r.districts.join(", ") : r.districts || "All"} | Status: {r.status || "unknown"}
                         </p>
-                        <p className="text-[11px] mt-1" style={{ color: "var(--color-text-muted)" }}>{r.date}</p>
+                        <p className="text-[11px] mt-1" style={{ color: "var(--color-text-muted)" }}>
+                          Created: {r.created_at || r.date || "-"}
+                        </p>
+                        {r.generated_at && (
+                          <p className="text-[11px] mt-1" style={{ color: "var(--color-text-muted)" }}>
+                            Generated: {r.generated_at}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button className="h-8 px-3 rounded text-xs font-medium flex items-center gap-1" style={{ color: "var(--color-azure)", border: "1px solid var(--color-border)" }}>
-                        <Download size={12} /> PDF
+                      <button
+                        className="h-8 px-3 rounded text-xs font-medium flex items-center gap-1"
+                        style={{ color: "var(--color-azure)", border: "1px solid var(--color-border)", opacity: r.status === "complete" ? 1 : 0.5 }}
+                        disabled={r.status !== "complete"}
+                        onClick={() => downloadReport(r.report_id || r.id)}
+                      >
+                        <Download size={12} /> Download CSV
                       </button>
                       <button className="h-8 px-3 rounded text-xs font-medium flex items-center gap-1" style={{ color: "var(--color-text-secondary)", border: "1px solid var(--color-border)" }}>
                         <Share2 size={12} />

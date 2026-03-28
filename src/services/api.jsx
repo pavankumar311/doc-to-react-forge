@@ -19,7 +19,6 @@ import {
   modelVersions,
   biasData,
   biasPerCrimeType,
-  reports,
   chatHistory,
   suggestedPrompts,
   networkNodes,
@@ -35,8 +34,9 @@ import {
 // const API_BASE_URL = "https://api.gscip.gov/v1";
 // const API_KEY = process.env.REACT_APP_GSCIP_API_KEY || "";
 const DASHBOARD_API_BASE = "http://localhost:9000/api/v1/dashboard";
+const REPORTS_API_BASE = "http://localhost:9000/api/v1/reports";
 export const AUTH_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3MzgyNTMwOCwgImV4cCI6IDE3NzM5MTE3MDh9.von1K4_3dXl-0nnVrAt9qk6AIt4zWcUVdFzyq_520gQ";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NDY4MDEzNiwgImV4cCI6IDE3NzQ3NjY1MzZ9.vXiEyCTR3bawJfLeM_zzIk5VYuXEAhN_rs9WZZxfQa4";
 
 function normalizeDistrictId(value) {
   if (value == null) return "";
@@ -469,63 +469,72 @@ export async function fetchBiasData(filters = {}) {
 }
 
 // ── Reports ────────────────────────────────────────────────────────────
-export async function fetchReports(filters = {}) {
-  // Real API implementation:
-  // try {
-  //   const params = new URLSearchParams();
-  //   if (filters.type) params.append("type", filters.type);
-  //   if (filters.district) params.append("district", filters.district);
-  //   const data = await apiFetch(`/reports?${params}`);
-  //   return data.reports;
-  // } catch (err) {
-  //   console.error("fetchReports failed:", err);
-  //   throw err;
-  // }
-
-  return Promise.resolve(reports);
+export async function fetchReports() {
+  try {
+    const res = await fetch(REPORTS_API_BASE, {
+      headers: {
+        Authorization: `Bearer ${AUTH_TOKEN}`,
+      },
+    });
+    if (!res.ok) throw new Error(`Reports fetch failed: ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error("fetchReports failed:", err);
+    return [];
+  }
 }
 
 export async function generateReport(config) {
-  // Real API implementation:
-  // try {
-  //   const data = await apiFetch("/reports/generate", {
-  //     method: "POST",
-  //     body: JSON.stringify(config),
-  //   });
-  //   return data; // { reportId, downloadUrl, status }
-  // } catch (err) {
-  //   console.error("generateReport failed:", err);
-  //   throw err;
-  // }
+  try {
+    const res = await fetch(`${REPORTS_API_BASE}/generate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${AUTH_TOKEN}`,
+      },
+      body: JSON.stringify(config),
+    });
+    if (!res.ok) throw new Error(`Generate report failed: ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error("generateReport failed:", err);
+    throw err;
+  }
+}
 
-  return Promise.resolve({
-    reportId: Date.now(),
-    downloadUrl: "#",
-    status: "generated",
-  });
+export async function fetchReportStatus(reportId) {
+  try {
+    const res = await fetch(`${REPORTS_API_BASE}/${reportId}`, {
+      headers: {
+        Authorization: `Bearer ${AUTH_TOKEN}`,
+      },
+    });
+    if (!res.ok) throw new Error(`Report status failed: ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error("fetchReportStatus failed:", err);
+    throw err;
+  }
 }
 
 export async function downloadReport(reportId) {
-  // Real API implementation:
-  // try {
-  //   const res = await fetch(`${API_BASE_URL}/reports/${reportId}/download`, {
-  //     headers: { "Authorization": `Bearer ${API_KEY}` },
-  //   });
-  //   if (!res.ok) throw new Error("Download failed");
-  //   const blob = await res.blob();
-  //   const url = window.URL.createObjectURL(blob);
-  //   const a = document.createElement("a");
-  //   a.href = url;
-  //   a.download = `report_${reportId}.pdf`;
-  //   a.click();
-  //   window.URL.revokeObjectURL(url);
-  //   return { success: true };
-  // } catch (err) {
-  //   console.error("downloadReport failed:", err);
-  //   throw err;
-  // }
-
-  return Promise.resolve({ success: true });
+  try {
+    const res = await fetch(`${REPORTS_API_BASE}/${reportId}/download`, {
+      headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+    });
+    if (!res.ok) throw new Error("Download failed");
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `report_${reportId}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    return { success: true };
+  } catch (err) {
+    console.error("downloadReport failed:", err);
+    throw err;
+  }
 }
 
 // ── Chat / NL Query ────────────────────────────────────────────────────

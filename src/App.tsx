@@ -7,6 +7,7 @@ import Sidebar from "./components/Sidebar";
 import FilterBar from "./components/FilterBar";
 import Dashboard from "./pages/Dashboard";
 import HeatmapPage from "./pages/HeatmapPage";
+import MapPage from "./pages/MapPage";
 import NetworkPage from "./pages/NetworkPage";
 import TrendsPage from "./pages/TrendsPage";
 import ModelsPage from "./pages/ModelsPage";
@@ -31,6 +32,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/heatmap" element={<HeatmapPage />} />
+              <Route path="/map" element={<MapPage />} />
               <Route path="/network" element={<NetworkPage />} />
               <Route path="/trends" element={<TrendsPage />} />
               <Route path="/models" element={<ModelsPage />} />

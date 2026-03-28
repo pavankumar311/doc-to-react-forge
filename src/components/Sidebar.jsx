@@ -1,13 +1,14 @@
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import {
-  LayoutDashboard, MapPin, Network, TrendingUp, FileText,
+  LayoutDashboard, MapPin, Map, Network, TrendingUp, FileText,
   MessageSquare, Activity, Settings, Shield,
 } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/", minRole: "Viewer" },
   { label: "Risk Heatmap", icon: MapPin, path: "/heatmap", minRole: "Viewer" },
+  { label: "Thematic Map", icon: Map, path: "/map", minRole: "Viewer" },
   { label: "Network Graph", icon: Network, path: "/network", minRole: "Analyst" },
   { label: "Trend Analysis", icon: TrendingUp, path: "/trends", minRole: "Viewer" },
   { label: "Reports", icon: FileText, path: "/reports", minRole: "Viewer" },
