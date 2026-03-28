@@ -1,12 +1,19 @@
 import { useAuth } from "../contexts/AuthContext";
 import { Bell, ChevronDown, LogOut, Settings, User } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { alerts } from "../services/mockData";
 
 export default function GlobalHeader() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const navigate = useNavigate();
+
+  const handleSignOut = () => {
+    logout();
+    navigate("/login");
+  };
 
   return (
     <header
@@ -70,7 +77,7 @@ export default function GlobalHeader() {
               <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm transition-colors hover:bg-gscip-card" style={{ color: "var(--color-text-secondary)" }}>
                 <Settings size={14} /> Settings
               </button>
-              <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm transition-colors hover:bg-gscip-card" style={{ color: "var(--color-risk-high)", borderTop: "1px solid var(--color-border)" }}>
+              <button onClick={handleSignOut} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm transition-colors hover:bg-gscip-card" style={{ color: "var(--color-risk-high)", borderTop: "1px solid var(--color-border)" }}>
                 <LogOut size={14} /> Sign Out
               </button>
             </div>
