@@ -50,6 +50,7 @@ function AppRoutes() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/heatmap" element={<HeatmapPage />} />
+                <Route path="/map" element={<MapPage />} />
                 <Route path="/network" element={<NetworkPage />} />
                 <Route path="/trends" element={<TrendsPage />} />
                 <Route path="/models" element={<ModelsPage />} />

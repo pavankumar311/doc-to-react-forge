@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Layers, Download } from "lucide-react";
+import { format, parse } from "date-fns";
+import { Layers, Download, Calendar as CalendarIcon, Filter, ChevronDown } from "lucide-react";
 import L from "leaflet";
 import { CircleMarker, MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
+
 import { HeatmapSkeleton } from "../components/Skeletons";
+import { useFilters } from "../contexts/FilterContext";
+import { AUTH_TOKEN } from "../services/api";
+
+// UI Components
+import { Calendar } from "../components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 
 const BASE_URL = "http://localhost:9000";
-const AUTH_PAYLOAD = { username: "admin", password: "password" };
 
 const CATEGORY_COLORS = {
   violent: "#ef4444",
@@ -26,7 +33,40 @@ const RISK_TIER_COLORS = {
   LOW: "#2563eb",
 };
 
-const formatDate = (value) => {
+/* ── Inline Component: DateInput (Unified Styled) ─────────────────────── */
+function DateInput({ label, value, onChange }) {
+  const parsed = parse(value, "yyyy-MM-dd", new Date());
+  const isValid = !Number.isNaN(parsed?.getTime());
+  const display = isValid ? format(parsed, "MMM d, yyyy") : "Select";
+
+  const handleSelect = (date) => {
+    if (!date) return;
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    onChange(`${yyyy}-${mm}-${dd}`);
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
+      <Popover>
+        <PopoverTrigger asChild>
+          <button className="flex items-center gap-1.5 h-8 px-3 rounded text-[11px] font-medium border border-border bg-background text-foreground hover:bg-accent/40 transition-colors">
+            <CalendarIcon className="h-3.5 w-3.5 opacity-60 text-azure" />
+            <span>{display}</span>
+            <ChevronDown className="h-3 w-3 ml-auto opacity-40" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start" style={{ zIndex: 2000 }}>
+          <Calendar mode="single" selected={isValid ? parsed : undefined} onSelect={handleSelect} className="p-3 shadow-2xl" />
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
+const formatDateStr = (value) => {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -41,8 +81,8 @@ const buildPresetRange = (presetDays, maxDate) => {
   const start = new Date(end);
   start.setDate(start.getDate() - presetDays);
   return {
-    from: formatDate(start),
-    to: formatDate(end),
+    from: formatDateStr(start),
+    to: formatDateStr(end),
   };
 };
 
@@ -134,19 +174,24 @@ function MapController({ selectedDistrict, onZoomChange }) {
 }
 
 export default function Heatmap() {
-  const [token, setToken] = useState("");
-  const [filters, setFilters] = useState(null);
+  const { filters: globalFilters } = useFilters();
   const [districts, setDistricts] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [blocks, setBlocks] = useState([]);
+  const [filterOptions, setFilterOptions] = useState(null);
+  
+  // Local Filter States
+  const [localDateFrom, setLocalDateFrom] = useState(globalFilters.dateFrom);
+  const [localDateTo, setLocalDateTo] = useState(globalFilters.dateTo);
+  const [localCrimeTypeIds, setLocalCrimeTypeIds] = useState(new Set());
+  const [localDatePreset, setLocalDatePreset] = useState("30");
+
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [selectedDistrictId, setSelectedDistrictId] = useState("");
-  const [selectedCrimeTypes, setSelectedCrimeTypes] = useState(new Set());
   const [viewMode, setViewMode] = useState("incidents");
-  const [datePreset, setDatePreset] = useState("30");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
   const [mapZoom, setMapZoom] = useState(11);
+  const [showArrests, setShowArrests] = useState(false);
+  const [showDomestic, setShowDomestic] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMap, setLoadingMap] = useState(false);
   const [error, setError] = useState("");
@@ -156,84 +201,72 @@ export default function Heatmap() {
     [districts, selectedDistrictId]
   );
 
-  const crimeTypes = filters?.crime_types || [];
-  const crimeCategories = filters?.crime_categories || [];
-
-  const selectedCrimeTypeIds = useMemo(
-    () => Array.from(selectedCrimeTypes).join(","),
-    [selectedCrimeTypes]
-  );
+  useEffect(() => {
+    if (globalFilters.dateFrom) setLocalDateFrom(globalFilters.dateFrom);
+    if (globalFilters.dateTo) setLocalDateTo(globalFilters.dateTo);
+  }, [globalFilters.dateFrom, globalFilters.dateTo]);
 
   useEffect(() => {
     const loadBootstrap = async () => {
       setLoading(true);
-      setError("");
       try {
-        const tokenRes = await fetch(`${BASE_URL}/api/v1/auth/token`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(AUTH_PAYLOAD),
-        });
-        if (!tokenRes.ok) throw new Error("Token request failed");
-        const tokenJson = await tokenRes.json();
-        const accessToken = tokenJson.access_token || tokenJson.token || tokenJson.accessToken;
-        if (!accessToken) throw new Error("Token missing in response");
-        setToken(accessToken);
-
-        const [filtersRes, districtsRes] = await Promise.all([
-          fetch(`${BASE_URL}/api/v1/dashboard/filters`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          }),
+        const [districtsRes, filtersRes] = await Promise.all([
           fetch(`${BASE_URL}/api/v1/dashboard/districts?include_boundary=true`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
+            headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
           }),
+          fetch(`${BASE_URL}/api/v1/dashboard/filters`, {
+            headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+          })
         ]);
 
-        if (!filtersRes.ok) throw new Error("Filters request failed");
         if (!districtsRes.ok) throw new Error("Districts request failed");
+        if (!filtersRes.ok) throw new Error("Filters request failed");
 
-        const filtersJson = await filtersRes.json();
-        const districtsJson = await districtsRes.json();
-        setFilters(filtersJson);
-        setDistricts(districtsJson || []);
+        const districtsData = await districtsRes.json();
+        const filtersData = await filtersRes.json();
 
-        const maxDate = filtersJson?.date_range?.max_date;
-        const presetRange = buildPresetRange(30, maxDate);
-        setDateFrom(presetRange.from);
-        setDateTo(presetRange.to);
+        setDistricts(districtsData || []);
+        setFilterOptions(filtersData);
+
+        if (!localDateFrom || !localDateTo) {
+          const maxDate = filtersData?.date_range?.max_date;
+          const range = buildPresetRange(30, maxDate);
+          setLocalDateFrom(range.from);
+          setLocalDateTo(range.to);
+        }
       } catch (err) {
-        console.error(err);
-        setError(err.message || "Failed to load map data");
+        setError(err.message || "Failed to load heat data");
       } finally {
         setLoading(false);
       }
     };
-
     loadBootstrap();
   }, []);
 
   useEffect(() => {
-    if (!filters) return;
-    if (datePreset === "custom") return;
-    const presetDays = Number(datePreset);
-    const maxDate = filters?.date_range?.max_date;
-    const presetRange = buildPresetRange(presetDays, maxDate);
-    setDateFrom(presetRange.from);
-    setDateTo(presetRange.to);
-  }, [datePreset, filters]);
+    if (!filterOptions || localDatePreset === "custom") return;
+    const maxDate = filterOptions?.date_range?.max_date;
+    const range = buildPresetRange(Number(localDatePreset), maxDate);
+    setLocalDateFrom(range.from);
+    setLocalDateTo(range.to);
+  }, [localDatePreset, filterOptions]);
 
   useEffect(() => {
     const loadMapData = async () => {
-      if (!token || !dateFrom || !dateTo) return;
+      if (!localDateFrom || !localDateTo) return;
       setLoadingMap(true);
       setError("");
       try {
         const baseParams = new URLSearchParams({
-          date_from: dateFrom,
-          date_to: dateTo,
+          date_from: localDateFrom,
+          date_to: localDateTo,
         });
-        if (selectedCrimeTypeIds) baseParams.set("crime_type_ids", selectedCrimeTypeIds);
+
         if (selectedDistrictId) baseParams.set("district_ids", selectedDistrictId);
+        
+        if (localCrimeTypeIds.size > 0) {
+          baseParams.set("crime_type_ids", Array.from(localCrimeTypeIds).join(","));
+        }
 
         const incidentsParams = new URLSearchParams(baseParams);
         incidentsParams.set("limit", "2000");
@@ -241,12 +274,21 @@ export default function Heatmap() {
         blocksParams.set("min_count", "1");
         blocksParams.set("limit", "5000");
 
+        if (showArrests) {
+          incidentsParams.set("is_arrest", "true");
+          blocksParams.set("is_arrest", "true");
+        }
+        if (showDomestic) {
+          incidentsParams.set("is_domestic", "true");
+          blocksParams.set("is_domestic", "true");
+        }
+
         const incidentsUrl = `${BASE_URL}/api/v1/dashboard/map/incidents?${incidentsParams.toString()}`;
         const blocksUrl = `${BASE_URL}/api/v1/dashboard/map/blocks?${blocksParams.toString()}`;
 
         const [incidentsRes, blocksRes] = await Promise.all([
-          fetch(incidentsUrl, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(blocksUrl, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(incidentsUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
+          fetch(blocksUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
         ]);
 
         if (!incidentsRes.ok) throw new Error("Incidents request failed");
@@ -259,32 +301,29 @@ export default function Heatmap() {
         setBlocks(blocksJson?.blocks || []);
       } catch (err) {
         console.error(err);
-        setError(err.message || "Failed to load map data");
+        setError(err.message || "Failed to load heatmap data");
       } finally {
         setLoadingMap(false);
       }
     };
 
     loadMapData();
-  }, [token, dateFrom, dateTo, selectedCrimeTypeIds, selectedDistrictId]);
+  }, [localDateFrom, localDateTo, localCrimeTypeIds, selectedDistrictId, showArrests, showDomestic]);
 
-  const toggleCrimeType = (crimeTypeId) => {
-    setSelectedCrimeTypes((prev) => {
+  const toggleCrimeType = (id) => {
+    setLocalCrimeTypeIds(prev => {
       const next = new Set(prev);
-      if (next.has(crimeTypeId)) {
-        next.delete(crimeTypeId);
-      } else {
-        next.add(crimeTypeId);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
+  const onZoomChange = useCallback((zoom) => setMapZoom(zoom), []);
+
   const incidentMarkers = incidents.filter((incident) =>
     Number.isFinite(Number(incident.latitude)) && Number.isFinite(Number(incident.longitude))
   );
-
-  const onZoomChange = useCallback((zoom) => setMapZoom(zoom), []);
 
   const clusteredIncidents = useMemo(() => {
     if (mapZoom >= CLUSTER_ZOOM_THRESHOLD) return [];
@@ -312,55 +351,80 @@ export default function Heatmap() {
   const heatMarkers = blocks
     .filter((block) => Number.isFinite(Number(block.latitude)) && Number.isFinite(Number(block.longitude)))
     .map((block) => {
-    const riskScore = Number(block.risk_score);
-    const hasRiskScore = Number.isFinite(riskScore);
-    const intensity = hasRiskScore ? Math.min(Math.max(riskScore, 0), 1) : Math.min(block.crime_count / 60, 1);
-    const radius = 12 + intensity * 24;
-    const tierColor = block.risk_tier && RISK_TIER_COLORS[block.risk_tier]
-      ? RISK_TIER_COLORS[block.risk_tier]
-      : null;
-    const color = tierColor || (intensity > 0.7 ? HEAT_GRADIENT.high : intensity > 0.4 ? HEAT_GRADIENT.mid : HEAT_GRADIENT.low);
-    return {
-      ...block,
-      radius,
-      color,
-      intensity,
-    };
-  });
+      const riskScore = Number(block.risk_score);
+      const hasRiskScore = Number.isFinite(riskScore);
+      const intensity = hasRiskScore ? Math.min(Math.max(riskScore, 0), 1) : Math.min(block.crime_count / 60, 1);
+      const radius = 12 + intensity * 24;
+      const tierColor = block.risk_tier && RISK_TIER_COLORS[block.risk_tier]
+        ? RISK_TIER_COLORS[block.risk_tier]
+        : null;
+      const color = tierColor || (intensity > 0.7 ? HEAT_GRADIENT.high : intensity > 0.4 ? HEAT_GRADIENT.mid : HEAT_GRADIENT.low);
+      return {
+        ...block,
+        radius,
+        color,
+        intensity,
+      };
+    });
 
   if (loading) {
     return <HeatmapSkeleton />;
   }
 
   return (
-    <div>
+    <div className="animate-in fade-in duration-500">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>Chicago mapps</h1>
+        <h1 className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>Density Heatmap</h1>
         <div className="flex items-center gap-2">
           <button
-            className="h-9 px-3 rounded text-xs font-medium flex items-center gap-2"
+            className="h-8 px-3 rounded text-[11px] font-semibold flex items-center gap-2 transition-all hover:bg-accent/10"
             style={{ color: "var(--color-azure)", border: "1px solid var(--color-border)" }}
             onClick={() => setViewMode((v) => (v === "density" ? "incidents" : "density"))}
           >
-            <Layers size={14} /> Layers
+            <Layers size={13} /> {viewMode === "incidents" ? "Grid Density" : "Point Analysis"}
           </button>
-          <button className="h-9 px-3 rounded text-xs font-medium flex items-center gap-2" style={{ color: "var(--color-azure)", border: "1px solid var(--color-border)" }}>
-            <Download size={14} /> Export PNG
+          <button className="h-8 px-3 rounded text-[11px] font-semibold flex items-center gap-2 transition-all hover:bg-accent/10" style={{ color: "var(--color-azure)", border: "1px solid var(--color-border)" }}>
+            <Download size={13} /> Export Map
           </button>
         </div>
       </div>
 
-      <div className="flex items-start gap-4 mb-4">
-        <div className="flex flex-wrap gap-3 flex-1">
-          <div className="min-w-[220px]">
-            <label className="text-[11px] uppercase tracking-wide" style={{ color: "var(--color-text-secondary)" }}>Search by location</label>
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex flex-wrap items-center gap-8 p-5 rounded-xl transition-all" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--color-border)", backdropFilter: "blur(8px)" }}>
+          <div className="space-y-1.5 min-w-[140px]">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              Preset Period
+            </label>
+            <select
+              value={localDatePreset}
+              onChange={e => setLocalDatePreset(e.target.value)}
+              className="h-8 w-full rounded bg-background border border-border px-3 text-[11px] font-medium focus:ring-1 focus:ring-azure cursor-pointer"
+            >
+              <option value="7">Last 7 Days</option>
+              <option value="30">Last 30 Days</option>
+              <option value="90">Last 90 Days</option>
+              <option value="custom">Custom Range</option>
+            </select>
+          </div>
+
+          {localDatePreset === "custom" && (
+            <div className="flex items-center gap-4 animate-in slide-in-from-left-2 duration-300">
+               <DateInput label="Start Date" value={localDateFrom} onChange={setLocalDateFrom} />
+               <div className="h-4 w-px bg-border mt-5" />
+               <DateInput label="End Date" value={localDateTo} onChange={setLocalDateTo} />
+            </div>
+          )}
+
+          <div className="space-y-1.5 min-w-[180px]">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              Target District
+            </label>
             <select
               value={selectedDistrictId}
               onChange={(e) => setSelectedDistrictId(e.target.value)}
-              className="mt-1 h-9 w-full rounded px-2 text-xs"
-              style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
+              className="h-8 w-full rounded bg-background border border-border px-3 text-[11px] font-medium focus:ring-1 focus:ring-azure cursor-pointer"
             >
-              <option value="">All districts</option>
+              <option value="">Full City Dashboard</option>
               {districts.map((district) => (
                 <option key={district.district_id} value={district.district_id}>
                   {district.district_name}
@@ -368,92 +432,66 @@ export default function Heatmap() {
               ))}
             </select>
           </div>
-          <div className="min-w-[220px]">
-            <label className="text-[11px] uppercase tracking-wide" style={{ color: "var(--color-text-secondary)" }}>Date range</label>
-            <div className="mt-1 flex gap-2">
-              <select
-                value={datePreset}
-                onChange={(e) => setDatePreset(e.target.value)}
-                className="h-9 rounded px-2 text-xs"
-                style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
-              >
-                <option value="7">Last 7 days</option>
-                <option value="30">Last 30 days</option>
-                <option value="90">Last 90 days</option>
-                <option value="custom">Custom</option>
-              </select>
-              {datePreset === "custom" && (
-                <>
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="h-9 rounded px-2 text-xs"
-                    style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
-                  />
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="h-9 rounded px-2 text-xs"
-                    style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
-                  />
-                </>
-              )}
-            </div>
-          </div>
-          <div className="min-w-[220px]">
-            <label className="text-[11px] uppercase tracking-wide" style={{ color: "var(--color-text-secondary)" }}>Crime type filter</label>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {crimeTypes.map((type) => {
-                const active = selectedCrimeTypes.has(type.crime_type_id);
-                return (
-                  <button
-                    key={type.crime_type_id}
-                    className="px-2 py-1 rounded-full text-[10px]"
-                    style={{
-                      border: "1px solid var(--color-border)",
-                      color: active ? "#0b1d3a" : "var(--color-text-muted)",
-                      background: active ? "rgba(100,181,246,0.7)" : "transparent",
-                    }}
-                    onClick={() => toggleCrimeType(type.crime_type_id)}
-                  >
-                    {type.primary_type}
-                  </button>
-                );
-              })}
+
+          <div className="flex flex-col gap-2 border-l border-border pl-8">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Incident Filters</label>
+            <div className="flex items-center gap-5">
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <input 
+                  type="checkbox" 
+                  checked={showArrests} 
+                  onChange={e => setShowArrests(e.target.checked)}
+                  className="w-4 h-4 rounded border-border bg-transparent text-azure focus:ring-0 transition-all group-hover:border-azure"
+                />
+                <span className="text-[11px] font-medium group-hover:text-foreground transition-colors" style={{ color: "var(--color-text-muted)" }}>Arrests</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <input 
+                  type="checkbox" 
+                  checked={showDomestic} 
+                  onChange={e => setShowDomestic(e.target.checked)}
+                  className="w-4 h-4 rounded border-border bg-transparent text-azure focus:ring-0 transition-all group-hover:border-azure"
+                />
+                <span className="text-[11px] font-medium group-hover:text-foreground transition-colors" style={{ color: "var(--color-text-muted)" }}>Domestic</span>
+              </label>
             </div>
           </div>
         </div>
-        <div className="min-w-[170px]">
-          <label className="text-[11px] uppercase tracking-wide" style={{ color: "var(--color-text-secondary)" }}>Heatmap / density</label>
-          <div className="mt-2 flex gap-2">
-            <button
-              className="h-9 px-3 rounded text-xs font-medium"
-              style={{ border: "1px solid var(--color-border)", color: viewMode === "incidents" ? "#0b1d3a" : "var(--color-text-muted)", background: viewMode === "incidents" ? "rgba(100,181,246,0.7)" : "transparent" }}
-              onClick={() => setViewMode("incidents")}
-            >
-              Points
-            </button>
-            <button
-              className="h-9 px-3 rounded text-xs font-medium"
-              style={{ border: "1px solid var(--color-border)", color: viewMode === "density" ? "#0b1d3a" : "var(--color-text-muted)", background: viewMode === "density" ? "rgba(100,181,246,0.7)" : "transparent" }}
-              onClick={() => setViewMode("density")}
-            >
-              Density
-            </button>
-          </div>
+
+        <div className="flex flex-wrap gap-2.5">
+            <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-accent/5 border border-transparent mr-1">
+              <Filter size={12} className="text-azure" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Type Selection</span>
+            </div>
+            {filterOptions?.crime_types?.map(type => {
+              const active = localCrimeTypeIds.has(type.crime_type_id);
+              return (
+                <button
+                  key={type.crime_type_id}
+                  onClick={() => toggleCrimeType(type.crime_type_id)}
+                  className={`px-3.5 py-1.5 rounded-full text-[10px] font-bold tracking-tight transition-all border ${
+                    active 
+                    ? "bg-azure/10 border-azure text-azure shadow-[0_0_15px_rgba(33,150,243,0.2)] scale-[1.02]" 
+                    : "border-border text-muted-foreground/80 hover:border-muted-foreground/90 hover:bg-accent/5"
+                  }`}
+                >
+                  {type.primary_type}
+                </button>
+              );
+            })}
         </div>
       </div>
 
       {error && (
-        <div className="mb-4 text-xs" style={{ color: "#ef4444" }}>
-          {error}
+        <div className="mb-4 text-xs p-4 rounded-lg bg-red-500/5 border border-red-500/20 flex items-center gap-3 animate-in shake duration-500" style={{ color: "#ef4444" }}>
+          <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+          <span><strong>Heat Analysis Error:</strong> {error}</span>
+          <button onClick={() => window.location.reload()} className="ml-auto text-azure underline">Retry</button>
         </div>
       )}
 
-      <div className="flex gap-4" style={{ height: "calc(100vh - 260px)" }}>
-        <div className="flex-1 relative rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)", minHeight: "420px" }}>
+      <div className="flex gap-5" style={{ height: "calc(100vh - 380px)" }}>
+        <div className="flex-1 relative rounded-2xl overflow-hidden glass-morphism shadow-2xl" style={{ border: "1px solid var(--color-border)", minHeight: "450px" }}>
           <MapContainer center={CITY_CENTER} zoom={11} scrollWheelZoom className="h-full w-full" style={{ background: "#0a0e17" }}>
             <TileLayer
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -497,6 +535,10 @@ export default function Heatmap() {
                   {incident.district_id && (
                     <div className="text-[10px]">District: {incident.district_id}</div>
                   )}
+                  <div className="flex gap-2 mt-1">
+                    {incident.is_arrest && <span className="px-1 rounded-[2px] bg-blue-500/20 text-blue-400 text-[9px] uppercase font-bold">Arrest</span>}
+                    {incident.is_domestic && <span className="px-1 rounded-[2px] bg-orange-500/20 text-orange-400 text-[9px] uppercase font-bold">Domestic</span>}
+                  </div>
                 </Tooltip>
               </CircleMarker>
             ))}
@@ -529,73 +571,101 @@ export default function Heatmap() {
           </MapContainer>
 
           <div
-            className="absolute bottom-4 right-4 rounded-lg p-3"
+            className="absolute bottom-6 right-6 rounded-xl p-4 shadow-2xl animate-in fade-in duration-700 hover:scale-[1.02] transition-transform"
             style={{
-              background: "rgba(26,39,68,0.9)",
+              background: "rgba(26,39,68,0.95)",
               border: "1px solid var(--color-border)",
               zIndex: 1000,
+              backdropFilter: "blur(10px)"
             }}
           >
-            <p className="text-[10px] font-semibold uppercase mb-2" style={{ color: "var(--color-text-secondary)" }}>Legend</p>
+            <p className="text-[10px] font-black uppercase tracking-widest mb-3" style={{ color: "var(--color-text-secondary)" }}>Legend</p>
             {viewMode === "density" ? (
               Object.entries(RISK_TIER_COLORS).map(([tier, color]) => (
-                <div key={tier} className="flex items-center gap-2 mb-1">
-                  <div className="w-3 h-3 rounded-sm" style={{ background: color }} />
-                  <span className="text-[10px]" style={{ color: "var(--color-text-primary)" }}>{tier}</span>
+                <div key={tier} className="flex items-center gap-3 mb-2 last:mb-0">
+                  <div className="w-3.5 h-3.5 rounded-sm shadow-sm" style={{ background: color, border: "1px solid rgba(255,255,255,0.1)" }} />
+                  <span className="text-[10px] font-bold" style={{ color: "var(--color-text-primary)" }}>{tier} RISK</span>
                 </div>
               ))
             ) : (
-              crimeCategories.length ? (
-                crimeCategories.map((category) => (
-                  <div key={category} className="flex items-center gap-2 mb-1">
-                    <div className="w-3 h-3 rounded-sm" style={{ background: CATEGORY_COLORS[category] || CATEGORY_COLORS.other }} />
-                    <span className="text-[10px]" style={{ color: "var(--color-text-primary)" }}>{category}</span>
+              (filterOptions?.crime_categories || []).length ? (
+                filterOptions.crime_categories.map((category) => (
+                  <div key={category} className="flex items-center gap-3 mb-2 last:mb-0">
+                    <div className="w-3.5 h-3.5 rounded-sm shadow-sm" style={{ background: CATEGORY_COLORS[category] || CATEGORY_COLORS.other, border: "1px solid rgba(255,255,255,0.1)" }} />
+                    <span className="text-[10px] font-bold uppercase" style={{ color: "var(--color-text-primary)" }}>{category}</span>
                   </div>
                 ))
               ) : (
-                <div className="text-[10px]" style={{ color: "var(--color-text-primary)" }}>Categories loading...</div>
+                <div className="text-[10px]" style={{ color: "var(--color-text-primary)" }}>Initializing...</div>
               )
             )}
           </div>
 
           {loadingMap && (
             <div
-              className="absolute top-4 left-4 rounded px-3 py-2 text-xs"
-              style={{ background: "rgba(26,39,68,0.9)", border: "1px solid var(--color-border)" }}
+              className="absolute top-6 left-6 rounded-full px-5 py-2.5 text-[11px] font-bold uppercase tracking-widest shadow-2xl animate-pulse"
+              style={{ background: "rgba(10,14,23,0.85)", border: "1px solid var(--color-azure)", color: "var(--color-azure)", zIndex: 1000, backdropFilter: "blur(10px)" }}
             >
-              Loading map data...
+              Analyzing Spatial Heat...
             </div>
           )}
         </div>
 
         {selectedIncident && (
-          <div className="w-80 rounded-lg overflow-y-auto" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
-            <div className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-mono text-sm font-bold" style={{ color: "var(--color-text-primary)" }}>Incident</h2>
-                <button onClick={() => setSelectedIncident(null)} className="text-xs" style={{ color: "var(--color-text-muted)" }}>x</button>
+          <div className="w-[340px] rounded-2xl overflow-y-auto glass-morphism animate-in slide-in-from-right-4 duration-500" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex flex-col">
+                   <h2 className="text-sm font-bold tracking-tight" style={{ color: "var(--color-text-primary)" }}>Incident Analysis</h2>
+                   <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-tighter">Case #{selectedIncident.case_number || "N/A"}</span>
+                </div>
+                <button onClick={() => setSelectedIncident(null)} className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-accent/20 transition-colors" style={{ color: "var(--color-text-muted)" }}>x</button>
               </div>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span style={{ color: "var(--color-text-secondary)" }}>Type:</span>
-                  <span style={{ color: "var(--color-text-primary)" }}>{selectedIncident.primary_type}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span style={{ color: "var(--color-text-secondary)" }}>Description:</span>
-                  <span style={{ color: "var(--color-text-primary)" }}>{selectedIncident.description}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span style={{ color: "var(--color-text-secondary)" }}>Category:</span>
-                  <span style={{ color: "var(--color-text-primary)" }}>{selectedIncident.category}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span style={{ color: "var(--color-text-secondary)" }}>Date:</span>
-                  <span style={{ color: "var(--color-text-primary)" }}>{selectedIncident.date}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span style={{ color: "var(--color-text-secondary)" }}>Block:</span>
-                  <span style={{ color: "var(--color-text-primary)" }}>{selectedIncident.block_address}</span>
-                </div>
+
+              <div className="space-y-6">
+                 <div className="p-4 rounded-xl bg-accent/5 border border-border space-y-4">
+                    <div className="space-y-1">
+                       <div className="text-[10px] text-muted-foreground uppercase font-bold">Primary Offense</div>
+                       <div className="text-sm font-bold text-foreground">{selectedIncident.primary_type}</div>
+                    </div>
+                    <div className="space-y-1">
+                       <div className="text-[10px] text-muted-foreground uppercase font-bold">Description Details</div>
+                       <div className="pl-3 border-l-2 border-azure/40 text-xs italic text-muted-foreground/90 leading-relaxed">
+                          {selectedIncident.description}
+                       </div>
+                    </div>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                       <span className="text-[10px] text-muted-foreground uppercase font-bold block">Temporal Marker</span>
+                       <span className="text-xs font-semibold text-foreground/90">{selectedIncident.date}</span>
+                    </div>
+                    <div className="space-y-1">
+                       <span className="text-[10px] text-muted-foreground uppercase font-bold block">Security Sector</span>
+                       <span className="text-xs font-semibold text-foreground/90">District {selectedIncident.district_id}</span>
+                    </div>
+                 </div>
+
+                 <div className="space-y-1">
+                    <span className="text-[10px] text-muted-foreground uppercase font-bold block">Geographic Identifier</span>
+                    <span className="text-xs font-semibold text-foreground/90 break-words">{selectedIncident.block_address}</span>
+                 </div>
+
+                 <div className="pt-6 border-t border-border space-y-4">
+                    <div className="flex justify-between items-center group">
+                       <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors">Arrest Validated</span>
+                       <span className={`px-2 py-0.5 rounded text-[10px] font-black ${selectedIncident.is_arrest ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-500/20 text-muted-foreground"}`}>
+                          {selectedIncident.is_arrest ? "VERIFIED" : "NONE"}
+                       </span>
+                    </div>
+                    <div className="flex justify-between items-center group">
+                       <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors">Domestic Nexus</span>
+                       <span className={`px-2 py-0.5 rounded text-[10px] font-black ${selectedIncident.is_domestic ? "bg-orange-500/20 text-orange-400" : "bg-neutral-500/20 text-muted-foreground"}`}>
+                          {selectedIncident.is_domestic ? "AFFIRMED" : "UNREL"}
+                       </span>
+                    </div>
+                 </div>
               </div>
             </div>
           </div>

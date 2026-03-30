@@ -17,7 +17,7 @@ export default function TrendsPage() {
   const [auxLoading, setAuxLoading] = useState(true);
   const { filters, districtIdByName } = useFilters();
 
-  const windowType = granularity === "Daily" ? "day" : granularity === "Weekly" ? "week" : "month";
+  const windowType = granularity === "Daily" ? "day" : granularity === "Weekly" ? "week" : granularity === "Monthly" ? "month" : "year";
   const lineColors = ["#1E88E5", "#F57C00", "#2E7D32", "#8E24AA", "#00897B", "#C62828"];
 
   useEffect(() => {
@@ -68,7 +68,7 @@ export default function TrendsPage() {
         <h1 className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>Trend Analysis</h1>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            {["Daily", "Weekly", "Monthly"].map((g) => (
+            {["Daily", "Weekly", "Monthly", "Yearly"].map((g) => (
               <button
                 key={g}
                 onClick={() => setGranularity(g)}

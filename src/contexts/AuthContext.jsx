@@ -28,6 +28,9 @@ export function AuthProvider({ children }) {
       try {
         setUser(JSON.parse(session));
       } catch { /* ignore */ }
+    } else {
+      setUser(currentUser);
+      localStorage.setItem(SESSION_KEY, JSON.stringify(currentUser));
     }
     setLoading(false);
   }, []);
@@ -65,8 +68,8 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
-    setUser(null);
-    localStorage.removeItem(SESSION_KEY);
+    setUser(currentUser);
+    localStorage.setItem(SESSION_KEY, JSON.stringify(currentUser));
   };
 
   const hasRole = (minRole) => {

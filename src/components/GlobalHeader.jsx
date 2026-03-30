@@ -12,7 +12,7 @@ export default function GlobalHeader() {
 
   const handleSignOut = () => {
     logout();
-    navigate("/login");
+    navigate("/");
   };
 
   return (
