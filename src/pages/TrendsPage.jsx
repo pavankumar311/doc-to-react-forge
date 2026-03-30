@@ -24,13 +24,15 @@ export default function TrendsPage() {
     const loadTrend = async () => {
       setTrendLoading(true);
       try {
-        const [trendCompare, rolling] = await Promise.all([
+        const [trendCompare, rolling, types] = await Promise.all([
           fetchTrendCompare({ filters, windowType, districtIdByName }),
-          fetchRollingTrend({ filters }),
+          fetchRollingTrend({ filters, districtIdByName }),
+          fetchCrimeTypes({ filters, districtIdByName }),
         ]);
         setTrendData(trendCompare.series);
         setTrendDistricts(trendCompare.districts);
         setRollingTrend(rolling);
+        setCrimeTypes(types);
       } catch (err) {
         console.error("TrendsPage load error:", err);
       } finally {
@@ -44,11 +46,10 @@ export default function TrendsPage() {
     const loadAux = async () => {
       setAuxLoading(true);
       try {
-        const [types, spikes] = await Promise.all([fetchCrimeTypes(), fetchSpikeEvents()]);
-        setCrimeTypes(types);
+        const [spikes] = await Promise.all([fetchSpikeEvents()]);
         setSpikeEvents(spikes);
       } catch (err) {
-        console.error("TrendsPage load error:", err);
+        console.error("TrendsPage aux load error:", err);
       } finally {
         setAuxLoading(false);
       }
@@ -68,7 +69,7 @@ export default function TrendsPage() {
         <h1 className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>Trend Analysis</h1>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            {["Daily", "Weekly", "Monthly", "Yearly"].map((g) => (
+            {["Daily", "Weekly", "Monthly"].map((g) => (
               <button
                 key={g}
                 onClick={() => setGranularity(g)}
@@ -165,17 +166,17 @@ export default function TrendsPage() {
         </GscipCard>
       </div>
 
-      <GscipCard title="Crime Type Breakdown (Last 30 Days)">
+      <GscipCard title="Crime Type Breakdown">
         <div className="flex items-end gap-1 justify-between">
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={280}>
             <BarChart data={crimeTypes} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#2A3F6F" horizontal={false} />
               <XAxis type="number" stroke="#4A5880" fontSize={10} fontFamily="IBM Plex Mono" />
-              <YAxis type="category" dataKey="type" stroke="#4A5880" fontSize={11} fontFamily="IBM Plex Sans" width={70} />
-              <Tooltip contentStyle={chartTooltipStyle} />
+              <YAxis type="category" dataKey="type" stroke="#4A5880" fontSize={11} fontFamily="IBM Plex Sans" width={110} />
+              <Tooltip contentStyle={chartTooltipStyle} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
               <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                {crimeTypes.map((c, i) => (
-                  <rect key={i} fill={c.color} />
+                {crimeTypes.map((entry, index) => (
+                  <rect key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Bar>
             </BarChart>

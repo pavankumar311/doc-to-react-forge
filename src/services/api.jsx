@@ -94,9 +94,27 @@ function buildTrendCompareUrl({ filters, windowType, districtIdByName }) {
   return `${DASHBOARD_API_BASE}/trends/compare?${params.toString()}`;
 }
 
-function buildRollingTrendUrl({ filters }) {
+function buildRollingTrendUrl({ filters, districtIdByName }) {
   const params = new URLSearchParams();
   if (filters?.dateTo) params.set("date_to", filters.dateTo);
+
+  if (filters?.districts?.length) {
+    const ids = filters.districts
+      .map((name) => districtIdByName?.[name] ?? normalizeDistrictId(name))
+      .filter(Boolean);
+    if (ids.length > 0) params.set("district_ids", ids.join(","));
+  }
+
+  if (filters?.crimeTypes?.length) {
+    const ids = filters.crimeTypes
+      .map((name) => normalizeCrimeTypeId(name))
+      .filter(Boolean);
+    if (ids.length > 0) params.set("crime_type_ids", ids.join(","));
+  }
+
+  if (filters?.arrestOnly) params.set("is_arrest", "true");
+  if (filters?.domesticOnly) params.set("is_domestic", "true");
+
   return `${DASHBOARD_API_BASE}/trends/rolling?${params.toString()}`;
 }
 
@@ -203,19 +221,43 @@ export async function fetchAlerts(filters = {}) {
   return Promise.resolve(alerts);
 }
 
-export async function fetchCrimeTypes(filters = {}) {
-  // Real API implementation:
-  // try {
-  //   const params = new URLSearchParams();
-  //   if (filters.district) params.append("district", filters.district);
-  //   const data = await apiFetch(`/crimes/types?${params}`);
-  //   return data.types;
-  // } catch (err) {
-  //   console.error("fetchCrimeTypes failed:", err);
-  //   throw err;
-  // }
+function buildCrimeTypesUrl({ filters, districtIdByName }) {
+  const params = new URLSearchParams();
+  params.set("date_from", filters?.dateFrom);
+  params.set("date_to", filters?.dateTo);
 
-  return Promise.resolve(crimeTypes);
+  if (filters?.districts?.length) {
+    const ids = filters.districts
+      .map((name) => districtIdByName?.[name] ?? normalizeDistrictId(name))
+      .filter(Boolean);
+    if (ids.length > 0) params.set("district_ids", ids.join(","));
+  }
+  return `${DASHBOARD_API_BASE}/crime-types?${params.toString()}`;
+}
+
+export async function fetchCrimeTypes({ filters, districtIdByName } = {}) {
+  try {
+    const url = buildCrimeTypesUrl({ filters, districtIdByName });
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+    });
+    if (!res.ok) throw new Error(`Crime types fetch failed: ${res.status}`);
+    const data = await res.json();
+    const CATEGORY_COLORS = {
+      violent: "#ef4444",
+      property: "#f97316",
+      quality: "#eab308",
+      other: "#6b7280",
+    };
+    return (data?.items || []).map((item) => ({
+      type: item.primary_type,
+      count: item.crime_count,
+      color: CATEGORY_COLORS[item.category] || CATEGORY_COLORS.other,
+    }));
+  } catch (err) {
+    console.error("fetchCrimeTypes failed:", err);
+    return [];
+  }
 }
 
 export async function fetchWeeklyTrend(filters = {}) {
@@ -285,9 +327,9 @@ export async function fetchTrendCompare({ filters, windowType = "month", distric
   }
 }
 
-export async function fetchRollingTrend({ filters } = {}) {
+export async function fetchRollingTrend({ filters, districtIdByName } = {}) {
   try {
-    const url = buildRollingTrendUrl({ filters });
+    const url = buildRollingTrendUrl({ filters, districtIdByName });
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${AUTH_TOKEN}`,
