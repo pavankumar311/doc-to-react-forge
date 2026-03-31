@@ -86,6 +86,7 @@ export default function MapPage() {
   const [districts, setDistricts] = useState([]);
   const [riskData, setRiskData] = useState([]);
   const [blocks, setBlocks] = useState([]);
+  const [incidents, setIncidents] = useState([]);
   const [filterOptions, setFilterOptions] = useState(null);
 
   // Local Filter States
@@ -95,8 +96,9 @@ export default function MapPage() {
   const [localDatePreset, setLocalDatePreset] = useState("30");
 
   const [selectedDistrictId, setSelectedDistrictId] = useState("");
+  const [selectedIncident, setSelectedIncident] = useState(null);
   const [mapZoom, setMapZoom] = useState(11);
-  const [showBlocks, setShowBlocks] = useState(true);
+  const [viewMode, setViewMode] = useState("density"); // density (grid) vs points (incidents)
   const [showArrests, setShowArrests] = useState(false);
   const [showDomestic, setShowDomestic] = useState(false);
 
@@ -215,20 +217,25 @@ export default function MapPage() {
 
         const riskUrl = `${BASE_URL}/api/v1/dashboard/district-risk?${riskParams.toString()}`;
         const blocksUrl = `${BASE_URL}/api/v1/dashboard/map/blocks?${blocksParams.toString()}`;
+        const incidentsUrl = `${BASE_URL}/api/v1/dashboard/map/incidents?${riskParams.toString()}&limit=1000`;
 
-        const [riskRes, blocksRes] = await Promise.all([
+        const [riskRes, blocksRes, incidentsRes] = await Promise.all([
           fetch(riskUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
           fetch(blocksUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
+          fetch(incidentsUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
         ]);
 
         if (!riskRes.ok) throw new Error("District risk request failed");
         if (!blocksRes.ok) throw new Error("Blocks request failed");
+        if (!incidentsRes.ok) throw new Error("Incidents request failed");
 
         const riskJson = await riskRes.json();
         const blocksJson = await blocksRes.json();
+        const incidentsJson = await incidentsRes.json();
 
         setRiskData(riskJson?.districts || []);
         setBlocks(blocksJson?.blocks || []);
+        setIncidents(incidentsJson || []);
       } catch (err) {
         console.error(err);
         setError(err.message || "Failed to load map data");
@@ -261,17 +268,14 @@ export default function MapPage() {
         <h1 className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>Thematic Map</h1>
         <div className="flex items-center gap-2">
           <button
-            className="h-8 px-3 rounded text-[11px] font-semibold flex items-center gap-2 transition-all hover:bg-accent/10"
-            style={{ color: "var(--color-azure)", border: "1px solid var(--color-border)" }}
-            onClick={() => setShowBlocks((prev) => !prev)}
+            className="h-8 px-4 rounded text-[11px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all hover:bg-accent/10 border border-border"
+            style={{ color: "var(--color-azure)" }}
+            onClick={() => setViewMode((v) => (v === "density" ? "points" : "density"))}
           >
-            <Layers size={13} /> District Blocks
+            <Layers size={14} /> {viewMode === "points" ? "Point Analysis" : "Grid Density"}
           </button>
-          <button
-            className="h-8 px-3 rounded text-[11px] font-semibold flex items-center gap-2 transition-all hover:bg-accent/10"
-            style={{ color: "var(--color-azure)", border: "1px solid var(--color-border)" }}
-          >
-            <Download size={13} /> Export Map
+          <button className="h-8 px-4 rounded text-[11px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all hover:bg-accent/10 border border-border" style={{ color: "var(--color-azure)" }}>
+            <Download size={14} /> Export Map
           </button>
         </div>
       </div>
@@ -386,11 +390,22 @@ export default function MapPage() {
             bins={bins}
             colors={THEMATIC_COLORS}
             selectedDistrictId={selectedDistrictId}
-            onSelectDistrict={(district) => setSelectedDistrictId(district.district_id)}
+            onSelectDistrict={(district) => {
+              setSelectedDistrictId(district.district_id);
+              setSelectedIncident(null);
+            }}
             onZoomChange={onZoomChange}
             mapZoom={mapZoom}
             blocks={blocks}
-            showBlocks={showBlocks}
+            showBlocks={viewMode === "density"}
+            incidents={incidents}
+            showIncidents={viewMode === "points"}
+            onSelectIncident={(inc) => {
+              setSelectedIncident(inc);
+              setSelectedDistrictId("");
+            }}
+            activeIncidentId={selectedIncident?.incident_id}
+            showChoropleth={true}
           />
 
           <ThematicLegend title="Crimes per 1k" bins={bins} colors={THEMATIC_COLORS} />
@@ -405,75 +420,131 @@ export default function MapPage() {
           )}
         </div>
 
-        {selectedDistrict && selectedDistrictRisk && (
-          <div className="w-[340px] rounded-2xl overflow-y-auto glass-morphism animate-in slide-in-from-right-4 duration-500" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex flex-col">
-                   <h2 className="text-sm font-bold tracking-tight" style={{ color: "var(--color-text-primary)" }}>{selectedDistrict.district_name}</h2>
-                   <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-tighter">Security Profile Analysis</span>
-                </div>
-                <button onClick={() => setSelectedDistrictId("")} className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-accent/20 transition-colors" style={{ color: "var(--color-text-muted)" }}>x</button>
-              </div>
-              
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-3">
-                   <div className="p-3 rounded-xl bg-accent/5 border border-border">
-                      <div className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Frequency</div>
-                      <div className="text-lg font-bold tracking-tighter">{selectedDistrictRisk.crime_count} <span className="text-[10px] font-normal text-muted-foreground">pts</span></div>
-                   </div>
-                   <div className="p-3 rounded-xl bg-accent/5 border border-border">
-                      <div className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Density</div>
-                      <div className="text-lg font-bold tracking-tighter text-azure">{Number(selectedDistrictRisk.crimes_per_1000).toFixed(1)} <span className="text-[10px] font-normal text-muted-foreground">/1k</span></div>
-                   </div>
+        {/* Side Panel: District or Incident Analysis */}
+        {(selectedDistrict || selectedIncident) && (
+          <div className="w-[340px] rounded-2xl overflow-y-auto glass-morphism animate-in slide-in-from-right-4 duration-500 shadow-2xl" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
+            {selectedIncident ? (
+              /* Incident Analysis Panel */
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-sm font-bold tracking-tight" style={{ color: "var(--color-text-primary)" }}>Incident Forensics</h2>
+                    <span className="text-[10px] text-azure uppercase font-mono tracking-tighter">Case #{selectedIncident.incident_id.slice(-6)}</span>
+                  </div>
+                  <button onClick={() => setSelectedIncident(null)} className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors text-muted-foreground">x</button>
                 </div>
 
-                <div className="p-4 rounded-xl space-y-3" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid var(--color-border)" }}>
-                  <div className="flex justify-between items-center text-xs">
-                    <span style={{ color: "var(--color-text-secondary)" }}>Growth Trend (MoM):</span>
-                    <span className={`font-bold ${selectedDistrictRisk.mom_change_pct > 0 ? "text-red-400" : "text-emerald-400"}`}>
-                      {selectedDistrictRisk.mom_change_pct > 0 ? "↑" : "↓"} {Math.abs(selectedDistrictRisk.mom_change_pct)}%
-                    </span>
+                <div className="space-y-5">
+                  <div className="p-4 rounded-xl bg-azure/5 border border-azure/20">
+                    <div className="text-[10px] text-azure font-black uppercase tracking-widest mb-1">Primary Classification</div>
+                    <div className="text-base font-bold text-foreground leading-tight">{selectedIncident.primary_type}</div>
+                    <div className="text-[11px] text-muted-foreground mt-1">{selectedIncident.description}</div>
                   </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span style={{ color: "var(--color-text-secondary)" }}>Arrest Resolution:</span>
-                    <span className="font-bold text-foreground">{selectedDistrictRisk.arrest_rate}%</span>
-                  </div>
-                  <div className="pt-3 border-t border-border flex justify-between items-center">
-                    <span style={{ color: "var(--color-text-secondary)" }} className="text-[11px] font-bold uppercase tracking-wider">Safety Benchmark Index</span>
-                    <span className={`px-2 py-0.5 rounded text-[11px] font-black ${selectedDistrictRisk.relative_to_average > 1.2 ? "bg-red-500/20 text-red-500" : "bg-emerald-500/20 text-emerald-500"}`}>
-                      {selectedDistrictRisk.relative_to_average}x
-                    </span>
-                  </div>
-                </div>
 
-                <div className="mt-8">
-                  <h3 className="text-[11px] font-black uppercase tracking-[0.2em] mb-4 text-muted-foreground/60 flex items-center gap-2">
-                    <div className="h-px flex-1 bg-border" />
-                    Top Crime Vectors
-                    <div className="h-px flex-1 bg-border" />
-                  </h3>
-                  <div className="space-y-4">
-                    {selectedDistrictRisk.top_crime_types?.map((type, idx) => (
-                      <div key={idx} className="space-y-2">
-                        <div className="flex justify-between items-end">
-                          <span style={{ color: "var(--color-text-primary)" }} className="text-[11px] font-bold tracking-tight">{type.primary_type}</span>
-                          <span style={{ color: "var(--color-text-secondary)" }} className="text-[10px] font-mono">{type.crime_count} cases</span>
-                        </div>
-                        <div className="h-1.5 w-full rounded-full bg-accent/10 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-primary shadow-[0_0_8px_rgba(33,150,243,0.4)]"
-                            style={{
-                              width: `${(type.crime_count / selectedDistrictRisk.crime_count) * 100}%`
-                            }}
-                          />
-                        </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+                        <CalendarIcon size={14} className="text-muted-foreground" />
                       </div>
-                    ))}
+                      <div>
+                        <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">Temporal Log</div>
+                        <div className="text-[11px] font-medium text-foreground">{selectedIncident.date}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+                        <Filter size={14} className="text-muted-foreground" />
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">Spatial Context</div>
+                        <div className="text-[11px] font-medium text-foreground">{selectedIncident.block_address}</div>
+                        <div className="text-[10px] text-muted-foreground">District {selectedIncident.district_id}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-5 border-t border-border flex items-center gap-2">
+                    <div className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-tight ${selectedIncident.is_arrest ? "bg-emerald-500/20 text-emerald-500" : "bg-red-500/20 text-red-500"}`}>
+                      {selectedIncident.is_arrest ? "Arrest Secured" : "Unresolved"}
+                    </div>
+                    {selectedIncident.is_domestic && (
+                      <div className="px-2 py-1 rounded bg-purple-500/20 text-purple-400 text-[10px] font-black uppercase tracking-tight">
+                        Domestic
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              /* District Analysis Panel */
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex flex-col">
+                    <h2 className="text-sm font-bold tracking-tight" style={{ color: "var(--color-text-primary)" }}>{selectedDistrict.district_name}</h2>
+                    <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-tighter">Security Profile Analysis</span>
+                  </div>
+                  <button onClick={() => setSelectedDistrictId("")} className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-accent/20 transition-colors" style={{ color: "var(--color-text-muted)" }}>x</button>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 rounded-xl bg-accent/5 border border-border">
+                      <div className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Frequency</div>
+                      <div className="text-lg font-bold tracking-tighter">{selectedDistrictRisk?.crime_count} <span className="text-[10px] font-normal text-muted-foreground">pts</span></div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-accent/5 border border-border">
+                      <div className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Density</div>
+                      <div className="text-lg font-bold tracking-tighter text-azure">{Number(selectedDistrictRisk?.crimes_per_1000).toFixed(1)} <span className="text-[10px] font-normal text-muted-foreground">/1k</span></div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl space-y-3" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid var(--color-border)" }}>
+                    <div className="flex justify-between items-center text-xs">
+                      <span style={{ color: "var(--color-text-secondary)" }}>Growth Trend (MoM):</span>
+                      <span className={`font-bold ${selectedDistrictRisk?.mom_change_pct > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                        {selectedDistrictRisk?.mom_change_pct > 0 ? "↑" : "↓"} {Math.abs(selectedDistrictRisk?.mom_change_pct)}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span style={{ color: "var(--color-text-secondary)" }}>Arrest Resolution:</span>
+                      <span className="font-bold text-foreground">{selectedDistrictRisk?.arrest_rate}%</span>
+                    </div>
+                    <div className="pt-3 border-t border-border flex justify-between items-center">
+                      <span style={{ color: "var(--color-text-secondary)" }} className="text-[11px] font-bold uppercase tracking-wider">Safety Benchmark Index</span>
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-black ${selectedDistrictRisk?.relative_to_average > 1.2 ? "bg-red-500/20 text-red-500" : "bg-emerald-500/20 text-emerald-500"}`}>
+                        {selectedDistrictRisk?.relative_to_average}x
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-8">
+                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] mb-4 text-muted-foreground/60 flex items-center gap-2">
+                      <div className="h-px flex-1 bg-border" />
+                      Top Crime Vectors
+                      <div className="h-px flex-1 bg-border" />
+                    </h3>
+                    <div className="space-y-4">
+                      {selectedDistrictRisk?.top_crime_types?.map((type, idx) => (
+                        <div key={idx} className="space-y-2">
+                          <div className="flex justify-between items-end">
+                            <span style={{ color: "var(--color-text-primary)" }} className="text-[11px] font-bold tracking-tight">{type.primary_type}</span>
+                            <span style={{ color: "var(--color-text-secondary)" }} className="text-[10px] font-mono">{type.crime_count} cases</span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-accent/10 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-primary shadow-[0_0_8px_rgba(33,150,243,0.4)]"
+                              style={{
+                                width: `${(type.crime_count / selectedDistrictRisk.crime_count) * 100}%`
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

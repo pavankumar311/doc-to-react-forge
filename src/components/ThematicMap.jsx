@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import L from "leaflet";
-import { CircleMarker, GeoJSON, MapContainer, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { CircleMarker, GeoJSON, MapContainer, Pane, TileLayer, Tooltip, useMap } from "react-leaflet";
 
 const CITY_CENTER = [41.84, -87.63];
 const DETAIL_ZOOM_THRESHOLD = 13;
@@ -85,6 +85,11 @@ export default function ThematicMap({
   mapZoom = 11,
   blocks = [],
   showBlocks = true,
+  incidents = [],
+  showIncidents = true,
+  onSelectIncident,
+  activeIncidentId,
+  showChoropleth = true,
 }) {
   const riskMap = useMemo(() => {
     const map = new Map();
@@ -93,6 +98,13 @@ export default function ThematicMap({
     });
     return map;
   }, [riskData]);
+
+  const CATEGORY_COLORS = {
+    violent: "#ef4444",
+    property: "#f97316",
+    quality: "#eab308",
+    other: "#6b7280",
+  };
 
   const blockMarkers = useMemo(() => (
     blocks
@@ -135,11 +147,11 @@ export default function ThematicMap({
         const fillColor = getColorForValue(value, bins, colors);
         const isSelected = district.district_id === selectedDistrictId;
         const baseStyle = {
-          color: fillColor,
-          weight: 0.2,
-          opacity: 0.9,
-          fillColor,
-          fillOpacity: 0.92,
+          color: showChoropleth ? fillColor : "rgba(255,255,255,0.05)",
+          weight: showChoropleth ? 0.2 : 0.5,
+          opacity: showChoropleth ? 0.9 : 0.3,
+          fillColor: showChoropleth ? fillColor : "transparent",
+          fillOpacity: showChoropleth ? 0.92 : 0,
           lineJoin: "round",
         };
         const hoverStyle = {
@@ -199,6 +211,36 @@ export default function ThematicMap({
           </Tooltip>
         </CircleMarker>
       ))}
+
+      <Pane name="incidents-pane" style={{ zIndex: 600 }}>
+        {showIncidents && mapZoom >= DETAIL_ZOOM_THRESHOLD && incidents.map((inc) => {
+          const isSelected = inc.incident_id === activeIncidentId;
+          const color = CATEGORY_COLORS[inc.category?.toLowerCase()] || CATEGORY_COLORS.other;
+          return (
+            <CircleMarker
+              key={inc.incident_id}
+              center={[inc.latitude, inc.longitude]}
+              radius={isSelected ? 12 : 7}
+              pathOptions={{
+                color: isSelected ? "#fff" : color,
+                fillColor: color,
+                fillOpacity: 0.9,
+                weight: isSelected ? 3 : 1,
+              }}
+              eventHandlers={{
+                click: () => onSelectIncident?.(inc),
+              }}
+            >
+              <Tooltip direction="top" opacity={1} sticky>
+                <div className="text-xs font-bold">{inc.primary_type}</div>
+                <div className="text-[10px] text-muted-foreground">{inc.date}</div>
+                <div className="text-[10px] leading-tight mt-1">{inc.description}</div>
+                <div className="text-[10px] font-mono mt-1 opacity-60">{inc.block_address}</div>
+              </Tooltip>
+            </CircleMarker>
+          );
+        })}
+      </Pane>
     </MapContainer>
   );
 }
