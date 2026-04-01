@@ -1,3 +1,4 @@
+/** GSCIP Thematic Map v1.5 */
 import { useEffect, useMemo } from "react";
 import L from "leaflet";
 import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, TileLayer, Tooltip, useMap } from "react-leaflet";
@@ -91,6 +92,15 @@ export default function ThematicMap({
   activeIncidentId,
   showChoropleth = true,
   stations = [],
+  showStations = true,
+  beats = [],
+  showBeats = true,
+  beatRiskData = [],
+  beatBins = [],
+  onSelectBeat,
+  selectedBeatId,
+  precincts = [],
+  showPrecincts = false,
 }) {
   const riskMap = useMemo(() => {
     const map = new Map();
@@ -99,6 +109,12 @@ export default function ThematicMap({
     });
     return map;
   }, [riskData]);
+
+  const beatRiskMap = useMemo(() => {
+    const m = new Map();
+    beatRiskData.forEach((item) => m.set(item.beat_num, item));
+    return m;
+  }, [beatRiskData]);
 
   const CATEGORY_COLORS = {
     violent: "#ef4444",
@@ -142,56 +158,142 @@ export default function ThematicMap({
         districts={districts}
       />
 
-      {districts.filter((district) => district.boundary).map((district) => {
-        const risk = riskMap.get(district.district_id);
-        const value = risk ? Number(risk.crimes_per_1000) : null;
-        const fillColor = getColorForValue(value, bins, colors);
-        const isSelected = district.district_id === selectedDistrictId;
-        const baseStyle = {
-          color: showChoropleth ? fillColor : "rgba(255,255,255,0.05)",
-          weight: showChoropleth ? 0.2 : 0.5,
-          opacity: showChoropleth ? 0.9 : 0.3,
-          fillColor: showChoropleth ? fillColor : "transparent",
-          fillOpacity: showChoropleth ? 0.92 : 0,
-          lineJoin: "round",
-        };
-        const hoverStyle = {
-          ...baseStyle,
-          color: "#f8fafc",
-          weight: 1,
-          fillOpacity: 0.98,
-        };
-        const selectedStyle = isSelected
-          ? { ...baseStyle, color: "#f8fafc", weight: 1.5, fillOpacity: 0.98 }
-          : baseStyle;
-        return (
-          <GeoJSON
-            key={district.district_id}
-            data={district.boundary}
-            style={selectedStyle}
-            eventHandlers={{
-              mouseover: (event) => event.target.setStyle(hoverStyle),
-              mouseout: (event) => event.target.setStyle(selectedStyle),
-              click: () => onSelectDistrict?.(district),
-            }}
-          >
-            <Tooltip direction="top" opacity={1} sticky>
-              <div className="text-xs font-semibold">{district.district_name}</div>
-              {risk && (
-                <>
-                  <div className="text-[10px]">Total incidents: {risk.crime_count}</div>
-                  <div className="text-[10px]">Crimes per 1k: {Number(risk.crimes_per_1000).toFixed(2)}</div>
-                  <div className="text-[10px]">Safety index: {Number(risk.safety_index).toFixed(2)}</div>
-                  <div className="text-[10px]">Relative to avg: {Number(risk.relative_to_average).toFixed(2)}x</div>
-                </>
-              )}
-            </Tooltip>
-          </GeoJSON>
-        );
-      })}
+      <Pane name="districts-pane" style={{ zIndex: 400 }}>
+        {districts.filter((district) => district.boundary).map((district) => {
+          const risk = riskMap.get(district.district_id);
+          const value = risk ? Number(risk.crimes_per_1000) : null;
+          const fillColor = getColorForValue(value, bins, colors);
+          const isSelected = district.district_id === selectedDistrictId;
+          const baseStyle = {
+            color: showChoropleth ? fillColor : "rgba(255,255,255,0.05)",
+            weight: showChoropleth ? 0.2 : 0.5,
+            opacity: showChoropleth ? 0.9 : 0.3,
+            fillColor: showChoropleth ? fillColor : "transparent",
+            fillOpacity: showChoropleth ? 0.92 : 0,
+            lineJoin: "round",
+          };
+          const hoverStyle = {
+            ...baseStyle,
+            color: "#f8fafc",
+            weight: 1,
+            fillOpacity: 0.98,
+          };
+          const selectedStyle = isSelected
+            ? { ...baseStyle, color: "#f8fafc", weight: 1.5, fillOpacity: 0.98 }
+            : baseStyle;
+          return (
+            <GeoJSON
+              key={district.district_id}
+              data={district.boundary}
+              style={selectedStyle}
+              eventHandlers={{
+                mouseover: (event) => event.target.setStyle(hoverStyle),
+                mouseout: (event) => event.target.setStyle(selectedStyle),
+                click: () => onSelectDistrict?.(district),
+              }}
+            >
+              <Tooltip direction="top" opacity={1} sticky>
+                <div className="text-xs font-semibold">{district.district_name}</div>
+                {risk && (
+                  <>
+                    <div className="text-[10px]">Total incidents: {risk.crime_count}</div>
+                    <div className="text-[10px]">Crimes per 1k: {Number(risk.crimes_per_1000).toFixed(2)}</div>
+                    <div className="text-[10px]">Safety index: {Number(risk.safety_index).toFixed(2)}</div>
+                    <div className="text-[10px]">Relative to avg: {Number(risk.relative_to_average).toFixed(2)}x</div>
+                  </>
+                )}
+              </Tooltip>
+            </GeoJSON>
+          );
+        })}
+      </Pane>
+
+      <Pane name="precincts-pane" style={{ zIndex: 450 }}>
+        {showPrecincts && precincts.map((p) => {
+          if (!p.boundary) return null;
+          return (
+            <GeoJSON
+              key={p.ward_precinct}
+              data={p.boundary}
+              style={{
+                color: "#60a5fa",
+                weight: 1.5,
+                dashArray: "4, 6",
+                fillColor: "rgba(96, 165, 250, 0.05)",
+                fillOpacity: 0.15
+              }}
+            >
+              <Tooltip direction="top" opacity={0.97} sticky>
+                <div style={{ background: "#0f172a", border: "1px solid #1e40af", padding: "8px 12px", borderRadius: "10px", minWidth: "150px" }}>
+                  <div style={{ fontSize: "9px", fontWeight: 900, textTransform: "uppercase", color: "#60a5fa", letterSpacing: "0.12em", marginBottom: "4px" }}>Political Boundary</div>
+                  <div style={{ fontSize: "13px", fontWeight: 900, color: "#f8fafc" }}>Ward {p.ward}</div>
+                  <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "2px" }}>Precinct {p.precinct}</div>
+                  {p.shape_area && <div style={{ fontSize: "9px", color: "#475569", marginTop: "4px" }}>Area: {Number(p.shape_area / 1e6).toFixed(2)} km²</div>}
+                </div>
+              </Tooltip>
+            </GeoJSON>
+          );
+        })}
+      </Pane>
+
+      <Pane name="beats-pane" style={{ zIndex: 500 }}>
+        {beats.map((b) => {
+          if (!b.boundary) return null;
+          const districtKey = String(b.district || "").padStart(3, "0");
+          const isHighlight = selectedDistrictId && b.district === selectedDistrictId.replace(/^0+/, "");
+          const districtRisk = riskMap.get(districtKey);
+          const localRisk = beatRiskMap.get(b.beat_num);
+          return (
+            <GeoJSON
+              key={b.beat_num}
+              data={b.boundary}
+              style={{
+                color: isHighlight ? "#3b82f6" : "rgba(30, 64, 175, 0.5)",
+                weight: isHighlight ? 2.5 : 1,
+                fillColor: isHighlight ? "rgba(59,130,246,0.05)" : "transparent",
+                fillOpacity: isHighlight ? 1 : 0,
+              }}
+            >
+              <Tooltip direction="top" opacity={0.97} sticky>
+                <div style={{ background: "#0f172a", border: "1px solid #1e3a8a", padding: "10px 12px", borderRadius: "10px", minWidth: "170px" }}>
+                  <div style={{ fontSize: "9px", fontWeight: 900, textTransform: "uppercase", color: "#3b82f6", letterSpacing: "0.12em", marginBottom: "6px" }}>CPD Operational Beat</div>
+                  <div style={{ fontSize: "14px", fontWeight: 900, color: "#f8fafc", marginBottom: "2px" }}>Beat {b.beat_num}</div>
+                  <div style={{ fontSize: "10px", color: "#94a3b8", marginBottom: "8px" }}>Sector {b.sector} · District {b.district}</div>
+                  
+                  {localRisk ? (
+                    <div style={{ borderTop: "1px solid #1e293b", paddingTop: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px" }}>
+                        <span style={{ color: "#64748b" }}>Local Crimes</span>
+                        <span style={{ color: "#fbbf24", fontWeight: 800 }}>{localRisk.crime_count}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px" }}>
+                        <span style={{ color: "#64748b" }}>Local Arrest Rate</span>
+                        <span style={{ color: "#34d399", fontWeight: 800 }}>{localRisk.arrest_rate}%</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px" }}>
+                        <span style={{ color: "#64748b" }}>Domestic Rate</span>
+                        <span style={{ color: "#60a5fa", fontWeight: 800 }}>{localRisk.domestic_rate}%</span>
+                      </div>
+                    </div>
+                  ) : districtRisk ? (
+                    <div style={{ borderTop: "1px solid #1e293b", paddingTop: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px" }}>
+                        <span style={{ color: "#64748b" }}>District Avg/1k</span>
+                        <span style={{ color: "#94a3b8" }}>{Number(districtRisk.crimes_per_1000 || 0).toFixed(1)}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: "9px", color: "#475569", fontStyle: "italic" }}>Awaiting sync...</div>
+                  )}
+                </div>
+              </Tooltip>
+            </GeoJSON>
+          );
+        })}
+      </Pane>
 
       <Pane name="stations-pane" style={{ zIndex: 650 }}>
-        {stations?.map((s) => {
+        {showStations && stations?.map((s) => {
           const lat = parseFloat(s.latitude);
           const lon = parseFloat(s.longitude);
           if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
@@ -199,6 +301,7 @@ export default function ThematicMap({
             <Marker
               key={s.district_id || `${lat}-${lon}-${Math.random()}`}
               position={[lat, lon]}
+              pane="stations-pane"
               icon={L.divIcon({
                 html: `
                   <div style="
@@ -260,27 +363,29 @@ export default function ThematicMap({
         })}
       </Pane>
 
-      {showBlocks && mapZoom >= DETAIL_ZOOM_THRESHOLD && blockMarkers.map((block) => (
-        <CircleMarker
-          key={block.block_id}
-          center={[Number(block.latitude), Number(block.longitude)]}
-          radius={block.radius}
-          pathOptions={{
-            color: block.color,
-            fillColor: block.color,
-            fillOpacity: 0.55,
-            weight: 1,
-          }}
-        >
-          <Tooltip direction="top" opacity={1}>
-            <div className="text-xs font-semibold">{block.block_address}</div>
-            <div className="text-[10px]">Crimes: {block.crime_count}</div>
-            {Number.isFinite(Number(block.risk_score)) && (
-              <div className="text-[10px]">Risk score: {Number(block.risk_score).toFixed(2)}</div>
-            )}
-          </Tooltip>
-        </CircleMarker>
-      ))}
+      <Pane name="blocks-pane" style={{ zIndex: 600 }}>
+        {showBlocks && mapZoom >= DETAIL_ZOOM_THRESHOLD && blockMarkers.map((block) => (
+          <CircleMarker
+            key={block.block_id}
+            center={[Number(block.latitude), Number(block.longitude)]}
+            radius={block.radius}
+            pathOptions={{
+              color: block.color,
+              fillColor: block.color,
+              fillOpacity: 0.55,
+              weight: 1,
+            }}
+          >
+            <Tooltip direction="top" opacity={1}>
+              <div className="text-xs font-semibold">{block.block_address}</div>
+              <div className="text-[10px]">Crimes: {block.crime_count}</div>
+              {Number.isFinite(Number(block.risk_score)) && (
+                <div className="text-[10px]">Risk score: {Number(block.risk_score).toFixed(2)}</div>
+              )}
+            </Tooltip>
+          </CircleMarker>
+        ))}
+      </Pane>
 
       <Pane name="incidents-pane" style={{ zIndex: 600 }}>
         {showIncidents && mapZoom >= DETAIL_ZOOM_THRESHOLD && incidents.map((inc) => {

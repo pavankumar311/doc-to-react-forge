@@ -1,3 +1,4 @@
+/** GSCIP API Service Layer v1.5 */
 /**
  * GSCIP API Service Layer
  * 
@@ -33,8 +34,8 @@ import {
 // ── Configuration ──────────────────────────────────────────────────────
 // const API_BASE_URL = "https://api.gscip.gov/v1";
 // const API_KEY = process.env.REACT_APP_GSCIP_API_KEY || "";
-const DASHBOARD_API_BASE = "http://localhost:9001/api/v1/dashboard";
-const REPORTS_API_BASE = "http://localhost:9001/api/v1/reports";
+const DASHBOARD_API_BASE = "http://localhost:9002/api/v1/dashboard";
+const REPORTS_API_BASE = "http://localhost:9002/api/v1/reports";
 export const AUTH_TOKEN =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NTAyNDExMywgImV4cCI6IDE3NzUxMTA1MTN9.6gi6yo_r_YfG_cNy4OdB91Bj3aafFL7PkeTPZN_8j8U";
 
@@ -459,5 +460,21 @@ export async function fetchPoliceStations() {
     headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
   });
   if (!res.ok) throw new Error("Police stations fetch failed");
+  return await res.json();
+}
+
+export async function fetchPoliceBeats() {
+  const res = await fetch(`${DASHBOARD_API_BASE}/map/police-beats`, {
+    headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+  });
+  if (!res.ok) throw new Error("Police beats fetch failed");
+  return await res.json();
+}
+
+export async function fetchPrecincts() {
+  const res = await fetch(`${DASHBOARD_API_BASE}/map/precincts`, {
+    headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+  });
+  if (!res.ok) throw new Error("Precincts fetch failed");
   return await res.json();
 }

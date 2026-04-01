@@ -1,14 +1,17 @@
+/** GSCIP Map Page v1.5 */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format, parse } from "date-fns";
 import { Layers, Download, Calendar as CalendarIcon, Filter, ChevronDown } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 import ThematicMap from "../components/ThematicMap";
 import ThematicLegend from "../components/ThematicLegend";
 import { HeatmapSkeleton } from "../components/Skeletons";
 import { useFilters } from "../contexts/FilterContext";
-import { AUTH_TOKEN, fetchPoliceStations } from "../services/api";
+import { AUTH_TOKEN, fetchPoliceStations, fetchPoliceBeats, fetchPrecincts } from "../services/api";
 
-const BASE_URL = "http://localhost:9001";
+const BASE_URL = "http://localhost:9002";
 const THEMATIC_COLORS = ["#fde68a", "#fbbf24", "#f59e0b", "#f97316", "#ef4444"];
 
 /* ── Inline Component: DateInput (Styled like Home Page) ──────────────── */
@@ -86,6 +89,10 @@ export default function MapPage() {
   const [selectedDistrictId, setSelectedDistrictId] = useState("");
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [stations, setStations] = useState([]);
+  const [beats, setBeats] = useState([]);
+  const [precincts, setPrecincts] = useState([]);
+  const [beatRiskData, setBeatRiskData] = useState([]);
+  const [showPoliticalWards, setShowPoliticalWards] = useState(false);
 
   const [mapZoom, setMapZoom] = useState(11);
   const [viewMode, setViewMode] = useState("density"); // density vs points
@@ -118,6 +125,7 @@ export default function MapPage() {
     [riskData, selectedDistrictId]
   );
 
+
   // Initial load
   useEffect(() => {
     const loadBootstrap = async () => {
@@ -138,21 +146,20 @@ export default function MapPage() {
 
         setDistricts(districtsData || []);
         setFilterOptions(filtersData);
+        setBeatRiskData([]); // Initialize beat risk
 
-        // Fetch stations separately so it doesn't block critical map data
+        // Fetch infra & boundaries
         try {
-          const stationsRes = await fetch(`${BASE_URL}/api/v1/dashboard/map/police-stations`, {
-            headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
-          });
-          const stationsData = await stationsRes.json();
-          // Extract array even if wrapped in { stations: [] } or { data: [] }
-          const stationList = Array.isArray(stationsData) 
-            ? stationsData 
-            : (stationsData?.stations || stationsData?.data || []);
-          setStations(stationList);
+          const [sData, bData, pData] = await Promise.all([
+            fetchPoliceStations(),
+            fetchPoliceBeats(),
+            fetchPrecincts()
+          ]);
+          setStations(Array.isArray(sData) ? sData : (sData?.stations || sData?.data || []));
+          setBeats(bData || []);
+          setPrecincts(pData || []);
         } catch (sErr) {
-          console.warn("Station markers failed to load, continuing map render:", sErr);
-          setStations([]);
+          console.warn("Extra layers failed to load:", sErr);
         }
 
         if (!localDateFrom || !localDateTo) {
@@ -169,6 +176,15 @@ export default function MapPage() {
     };
     loadBootstrap();
   }, []);
+
+  // ── Time Window Preset → actual dates (THE FIX) ──────────────────────
+  useEffect(() => {
+    if (localDatePreset === "custom") return; // custom mode: user controls dates directly
+    const maxDate = filterOptions?.date_range?.max_date || null;
+    const range = buildPresetRange(Number(localDatePreset), maxDate);
+    setLocalDateFrom(range.from);
+    setLocalDateTo(range.to);
+  }, [localDatePreset, filterOptions]);
 
   // Map Data Loading
   useEffect(() => {
@@ -189,20 +205,24 @@ export default function MapPage() {
         if (showDomestic) commonParams.set("is_domestic", "true");
 
         const riskUrl = `${BASE_URL}/api/v1/dashboard/district-risk?${commonParams.toString()}`;
+        const beatRiskUrl = `${BASE_URL}/api/v1/dashboard/map/beat-risk?${commonParams.toString()}`;
         const blocksUrl = `${BASE_URL}/api/v1/dashboard/map/blocks?${commonParams.toString()}&limit=5000`;
         const incidentsUrl = `${BASE_URL}/api/v1/dashboard/map/incidents?${commonParams.toString()}&limit=1000`;
 
-        const [riskRes, blocksRes, incidentsRes] = await Promise.all([
+        const [riskRes, beatRiskRes, blocksRes, incidentsRes] = await Promise.all([
           fetch(riskUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
+          fetch(beatRiskUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
           fetch(blocksUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
           fetch(incidentsUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
         ]);
 
         const riskJson = await riskRes.json();
+        const beatRiskJson = await beatRiskRes.json();
         const blocksJson = await blocksRes.json();
         const incidentsJson = await incidentsRes.json();
 
         setRiskData(riskJson?.districts || []);
+        setBeatRiskData(beatRiskJson?.beats || []);
         setBlocks(blocksJson?.blocks || []);
         setIncidents(incidentsJson || []);
       } catch (err) {
@@ -251,17 +271,77 @@ export default function MapPage() {
 
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex flex-wrap items-center gap-6 p-5 rounded-xl border border-border bg-accent/5 backdrop-blur-md">
-          <div className="space-y-1.5 min-w-[140px]">
+          <div className="space-y-1.5">
             <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Time Window</label>
             <select
               value={localDatePreset}
               onChange={e => setLocalDatePreset(e.target.value)}
-              className="h-8 w-full rounded bg-background border border-border px-3 text-[11px] font-bold"
+              className="h-8 w-full rounded bg-background border border-border px-3 text-[11px] font-bold min-w-[140px]"
             >
               <option value="7">Last 7 Days</option>
               <option value="30">Last 30 Days</option>
               <option value="90">Last 90 Days</option>
+              <option value="custom">📅 Custom Range</option>
             </select>
+
+            {/* ── Custom date range picker — Popover+Calendar (matches FilterBar) ── */}
+            {localDatePreset === "custom" && (
+              <div className="flex items-center gap-3 mt-2 p-3 rounded-xl border border-azure/30 bg-azure/5 backdrop-blur-sm">
+                {/* FROM */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">From</span>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className="flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium border border-input bg-background text-foreground hover:bg-accent/40 transition-colors">
+                        <CalendarIcon className="h-3.5 w-3.5 opacity-60 text-azure" />
+                        <span>{localDateFrom ? format(parse(localDateFrom, "yyyy-MM-dd", new Date()), "MMM d, yyyy") : "Select"}</span>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={localDateFrom ? parse(localDateFrom, "yyyy-MM-dd", new Date()) : undefined}
+                        onSelect={(date) => date && setLocalDateFrom(format(date, "yyyy-MM-dd"))}
+                        disabled={(date) => localDateTo ? date > parse(localDateTo, "yyyy-MM-dd", new Date()) : false}
+                        className="p-3"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="text-muted-foreground font-bold text-sm">→</div>
+
+                {/* TO */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">To</span>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className="flex items-center gap-1.5 h-8 px-3 rounded text-xs font-medium border border-input bg-background text-foreground hover:bg-accent/40 transition-colors">
+                        <CalendarIcon className="h-3.5 w-3.5 opacity-60 text-azure" />
+                        <span>{localDateTo ? format(parse(localDateTo, "yyyy-MM-dd", new Date()), "MMM d, yyyy") : "Select"}</span>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={localDateTo ? parse(localDateTo, "yyyy-MM-dd", new Date()) : undefined}
+                        onSelect={(date) => date && setLocalDateTo(format(date, "yyyy-MM-dd"))}
+                        disabled={(date) => localDateFrom ? date < parse(localDateFrom, "yyyy-MM-dd", new Date()) : false}
+                        className="p-3"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Day count badge */}
+                {localDateFrom && localDateTo && (
+                  <div className="h-7 px-3 rounded-lg bg-azure/20 border border-azure/30 text-azure text-[10px] font-black flex items-center gap-1">
+                    <span className="text-[9px]">✓</span>
+                    {Math.round((new Date(localDateTo) - new Date(localDateFrom)) / 86400000 + 1)}d
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5 min-w-[180px]">
@@ -288,6 +368,10 @@ export default function MapPage() {
               <label className="flex items-center gap-2 cursor-pointer group">
                 <input type="checkbox" checked={showDomestic} onChange={e => setShowDomestic(e.target.checked)} className="w-4 h-4 rounded border-border" />
                 <span className="text-[11px] font-bold text-muted-foreground group-hover:text-foreground">Domestic Incidents</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer group border-l border-border pl-4">
+                <input type="checkbox" checked={showPoliticalWards} onChange={e => setShowPoliticalWards(e.target.checked)} className="w-4 h-4 rounded border-border" />
+                <span className="text-[11px] font-bold text-azure group-hover:brightness-125">Show Political Wards</span>
               </label>
             </div>
           </div>
@@ -327,6 +411,10 @@ export default function MapPage() {
             onSelectIncident={setSelectedIncident}
             activeIncidentId={selectedIncident?.incident_id}
             stations={stations}
+            beats={beats}
+            beatRiskData={beatRiskData}
+            precincts={precincts}
+            showPrecincts={showPoliticalWards}
           />
 
           <ThematicLegend title="Incidents per 1k" bins={bins} colors={THEMATIC_COLORS} />
@@ -375,30 +463,33 @@ export default function MapPage() {
               </div>
             ) : (
               <div className="p-6">
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-sm font-black uppercase tracking-tight text-white">{selectedDistrict.district_name}</h2>
-                  <button onClick={() => setSelectedDistrictId("")} className="h-6 w-6 text-muted-foreground">×</button>
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">Selected District</div>
+                    <h2 className="text-base font-black uppercase tracking-tight" style={{ color: "#38bdf8" }}>{selectedDistrict.district_name}</h2>
+                  </div>
+                  <button onClick={() => setSelectedDistrictId("")} className="h-7 w-7 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors flex items-center justify-center font-bold text-sm">×</button>
                 </div>
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-4 rounded-xl bg-gray-900 border border-gray-800">
-                      <div className="text-[9px] font-bold text-gray-500 uppercase mb-1">Incident Count</div>
-                      <div className="text-xl font-black">{selectedDistrictRisk?.crime_count || 0}</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-5 rounded-2xl bg-slate-900/50 border border-white/5 shadow-xl transition-all hover:border-azure/30 group">
+                      <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 group-hover:text-slate-400">Incident Count</div>
+                      <div className="text-2xl font-black text-white">{selectedDistrictRisk?.crime_count || 0}</div>
                     </div>
-                    <div className="p-4 rounded-xl bg-gray-900 border border-gray-800">
-                      <div className="text-[9px] font-bold text-gray-500 uppercase mb-1">Density/1k</div>
-                      <div className="text-xl font-black text-azure">{Number(selectedDistrictRisk?.crimes_per_1000 || 0).toFixed(1)}</div>
+                    <div className="p-5 rounded-2xl bg-slate-900/50 border border-white/5 shadow-xl transition-all hover:border-azure/30 group">
+                      <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 group-hover:text-azure">Density/1k</div>
+                      <div className="text-2xl font-black text-azure">{Number(selectedDistrictRisk?.crimes_per_1000 || 0).toFixed(1)}</div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-4 rounded-xl bg-gray-900 border border-gray-800">
-                      <div className="text-[9px] font-bold text-gray-500 uppercase mb-1">Arrest Rate</div>
-                      <div className="text-xl font-black text-green-500">{selectedDistrictRisk?.arrest_rate || 0}%</div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-5 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 shadow-xl transition-all hover:bg-emerald-500/10">
+                      <div className="text-[10px] font-black text-emerald-500/70 uppercase tracking-widest mb-2">Arrest Rate</div>
+                      <div className="text-2xl font-black text-emerald-400">{selectedDistrictRisk?.arrest_rate || 0}%</div>
                     </div>
-                    <div className="p-4 rounded-xl bg-gray-900 border border-gray-800">
-                      <div className="text-[9px] font-bold text-gray-500 uppercase mb-1">Domestic Rate</div>
-                      <div className="text-xl font-black text-purple-500">{selectedDistrictRisk?.domestic_rate || 0}%</div>
+                    <div className="p-5 rounded-2xl bg-violet-500/5 border border-violet-500/20 shadow-xl transition-all hover:bg-violet-500/10">
+                      <div className="text-[10px] font-black text-violet-500/70 uppercase tracking-widest mb-2">Domestic Rate</div>
+                      <div className="text-2xl font-black text-violet-400">{selectedDistrictRisk?.domestic_rate || 0}%</div>
                     </div>
                   </div>
                 </div>
