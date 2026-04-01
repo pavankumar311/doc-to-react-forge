@@ -97,7 +97,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
-        <Link to="/heatmap">
+        <Link to="/map">
           <GscipCard title="Risk Heatmap" subtitle="Click to explore full map" interactive>
             <div className="relative rounded overflow-hidden" style={{ height: 240, background: "linear-gradient(135deg, #0D1117 0%, #1A2744 50%, #0F1F3D 100%)" }}>
               {topRiskBlocks.map((b, i) => (
@@ -116,7 +116,7 @@ export default function Dashboard() {
               ))}
               <div className="absolute inset-0 flex items-center justify-center">
                 <span className="text-xs font-medium px-3 py-1.5 rounded" style={{ background: "rgba(21,101,192,0.8)", color: "#fff" }}>
-                  View Full Heatmap <ArrowRight size={12} className="inline ml-1" />
+                  View Full Map <ArrowRight size={12} className="inline ml-1" />
                 </span>
               </div>
             </div>

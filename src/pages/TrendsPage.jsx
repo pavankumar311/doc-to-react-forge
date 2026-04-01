@@ -1,10 +1,14 @@
 import { useState, useEffect } from "react";
-import { LineChart, Line, BarChart, Bar, ComposedChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend, CartesianGrid, ReferenceLine } from "recharts";
+import {
+  LineChart, Line, BarChart, Bar, ComposedChart,
+  ResponsiveContainer, XAxis, YAxis, Tooltip, Legend,
+  CartesianGrid, ReferenceLine, Cell,
+} from "recharts";
 import { Download } from "lucide-react";
 import GscipCard from "../components/GscipCard";
 import { TrendsSkeleton } from "../components/Skeletons";
 import { useFilters } from "../contexts/FilterContext";
-import { fetchTrendCompare, fetchRollingTrend, fetchCrimeTypes, fetchSpikeEvents } from "../services/api";
+import { fetchTrendCompare, fetchRollingTrend, fetchCrimeTypes } from "../services/api";
 
 export default function TrendsPage() {
   const [granularity, setGranularity] = useState("Daily");
@@ -12,12 +16,10 @@ export default function TrendsPage() {
   const [trendDistricts, setTrendDistricts] = useState([]);
   const [rollingTrend, setRollingTrend] = useState({ avg_7d: 0, avg_30d: 0, trend_slope: 0, series: [] });
   const [crimeTypes, setCrimeTypes] = useState([]);
-  const [spikeEvents, setSpikeEvents] = useState([]);
   const [trendLoading, setTrendLoading] = useState(true);
-  const [auxLoading, setAuxLoading] = useState(true);
   const { filters, districtIdByName } = useFilters();
 
-  const windowType = granularity === "Daily" ? "day" : granularity === "Weekly" ? "week" : granularity === "Monthly" ? "month" : "year";
+  const windowType = granularity === "Daily" ? "day" : granularity === "Weekly" ? "week" : "month";
   const lineColors = ["#1E88E5", "#F57C00", "#2E7D32", "#8E24AA", "#00897B", "#C62828"];
 
   useEffect(() => {
@@ -42,48 +44,31 @@ export default function TrendsPage() {
     loadTrend();
   }, [granularity, filters, districtIdByName, windowType]);
 
-  useEffect(() => {
-    const loadAux = async () => {
-      setAuxLoading(true);
-      try {
-        const [spikes] = await Promise.all([fetchSpikeEvents()]);
-        setSpikeEvents(spikes);
-      } catch (err) {
-        console.error("TrendsPage aux load error:", err);
-      } finally {
-        setAuxLoading(false);
-      }
-    };
-    loadAux();
-  }, []);
+  const chartTooltipStyle = {
+    background: "#1A2744", border: "1px solid #2A3F6F",
+    borderRadius: 6, fontSize: 12, color: "#F0F4FF",
+  };
 
-  const chartTooltipStyle = { background: "#1A2744", border: "1px solid #2A3F6F", borderRadius: 6, fontSize: 12, color: "#F0F4FF" };
-
-  if (trendLoading || auxLoading) {
-    return <TrendsSkeleton />;
-  }
+  if (trendLoading) return <TrendsSkeleton />;
 
   return (
-    <div>
+    <div className="animate-in fade-in duration-500">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>Trend Analysis</h1>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            {["Daily", "Weekly", "Monthly"].map((g) => (
-              <button
-                key={g}
-                onClick={() => setGranularity(g)}
-                className="h-8 px-3 rounded text-xs font-medium transition-colors"
-                style={{
-                  background: granularity === g ? "var(--color-cobalt)" : "transparent",
-                  color: granularity === g ? "#fff" : "var(--color-text-secondary)",
-                  border: `1px solid ${granularity === g ? "var(--color-cobalt)" : "var(--color-border)"}`,
-                }}
-              >
-                {g}
-              </button>
-            ))}
-          </div>
+        <div className="flex items-center gap-2">
+          {["Daily", "Weekly", "Monthly"].map((g) => (
+            <button
+              key={g} onClick={() => setGranularity(g)}
+              className="h-8 px-3 rounded text-xs font-medium transition-colors"
+              style={{
+                background: granularity === g ? "var(--color-cobalt)" : "transparent",
+                color: granularity === g ? "#fff" : "var(--color-text-secondary)",
+                border: `1px solid ${granularity === g ? "var(--color-cobalt)" : "var(--color-border)"}`,
+              }}
+            >
+              {g}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -97,90 +82,66 @@ export default function TrendsPage() {
             <Legend wrapperStyle={{ fontSize: 11, fontFamily: "IBM Plex Sans" }} />
             {trendDistricts.map((district, index) => (
               <Line
-                key={district.key}
-                type="monotone"
-                dataKey={district.key}
-                name={district.name}
-                stroke={lineColors[index % lineColors.length]}
-                strokeWidth={2}
-                dot={false}
+                key={district.key} type="monotone" dataKey={district.key} name={district.name}
+                stroke={lineColors[index % lineColors.length]} strokeWidth={2} dot={false}
               />
             ))}
           </LineChart>
         </ResponsiveContainer>
       </GscipCard>
 
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <GscipCard title="Rolling 7D vs 30D">
-          <ResponsiveContainer width="100%" height={200}>
+      <div className="grid grid-cols-1 gap-4 mb-4">
+        <GscipCard title="Rolling 7-Day vs 30-Day Average">
+          <ResponsiveContainer width="100%" height={240}>
             <ComposedChart data={rollingTrend.series}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2A3F6F" />
               <XAxis dataKey="label" stroke="#4A5880" fontSize={10} fontFamily="IBM Plex Mono" />
               <YAxis stroke="#4A5880" fontSize={10} fontFamily="IBM Plex Mono" />
               <Tooltip contentStyle={chartTooltipStyle} />
               <Bar dataKey="crime_count" fill="#1565C0" fillOpacity={0.6} radius={[2, 2, 0, 0]} />
-              {Number.isFinite(rollingTrend.avg_30d) && rollingTrend.avg_30d > 0 && (
-                <ReferenceLine
-                  y={rollingTrend.avg_30d}
-                  stroke="#F57C00"
-                  strokeDasharray="5 5"
-                  label={{ value: "30d avg", fill: "#F57C00", fontSize: 10 }}
-                />
+              {rollingTrend.avg_30d > 0 && (
+                <ReferenceLine y={rollingTrend.avg_30d} stroke="#F57C00" strokeDasharray="5 5" label={{ value: "30d avg", fill: "#F57C00", fontSize: 10 }} />
               )}
-              {Number.isFinite(rollingTrend.avg_7d) && rollingTrend.avg_7d > 0 && (
-                <ReferenceLine
-                  y={rollingTrend.avg_7d}
-                  stroke="#1E88E5"
-                  strokeDasharray="5 5"
-                  label={{ value: "7d avg", fill: "#1E88E5", fontSize: 10 }}
-                />
+              {rollingTrend.avg_7d > 0 && (
+                <ReferenceLine y={rollingTrend.avg_7d} stroke="#1E88E5" strokeDasharray="5 5" label={{ value: "7d avg", fill: "#1E88E5", fontSize: 10 }} />
               )}
             </ComposedChart>
           </ResponsiveContainer>
-          <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
-            Trend slope:{" "}
-            <span style={{ color: rollingTrend.trend_slope >= 0 ? "#2E7D32" : "#C62828" }}>
-              {rollingTrend.trend_slope >= 0 ? "+" : "-"} {Math.abs(rollingTrend.trend_slope).toFixed(1)}/day
-            </span>
-          </p>
-        </GscipCard>
-
-        <GscipCard title="Spike Detection Timeline">
-          <div className="relative" style={{ height: 200 }}>
-            <div className="absolute left-8 right-8 top-1/2 h-0.5" style={{ background: "var(--color-border)" }} />
-            {spikeEvents.map((s, i) => (
-              <div
-                key={s.blockId}
-                className="absolute flex flex-col items-center group"
-                style={{ left: `${15 + i * 35}%`, top: "30%" }}
-              >
-                <div className="w-4 h-4 rounded-full border-2 cursor-pointer" style={{ background: "#C62828", borderColor: "#F0F4FF" }} />
-                <div className="mt-2 text-center">
-                  <p className="text-[10px] font-mono" style={{ color: "var(--color-text-primary)" }}>{s.date}</p>
-                  <p className="text-[10px]" style={{ color: "var(--color-text-secondary)" }}>{s.blockLabel}</p>
-                  <p className="text-[10px] font-mono" style={{ color: "#C62828" }}>{s.ratio}x avg</p>
-                </div>
-              </div>
-            ))}
+          <div className="flex items-center justify-between mt-3 px-1">
+            <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+              Analysis of daily fluctuations versus moving averages.
+            </p>
+            <p className="text-xs font-mono font-bold" style={{ color: rollingTrend.trend_slope >= 0 ? "#2E7D32" : "#C62828" }}>
+              Trend Impact: {rollingTrend.trend_slope >= 0 ? "↑" : "↓"} {Math.abs(rollingTrend.trend_slope).toFixed(1)} incidents/day
+            </p>
           </div>
         </GscipCard>
       </div>
 
       <GscipCard title="Crime Type Breakdown">
         <div className="flex items-end gap-1 justify-between">
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={crimeTypes} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#2A3F6F" horizontal={false} />
-              <XAxis type="number" stroke="#4A5880" fontSize={10} fontFamily="IBM Plex Mono" />
-              <YAxis type="category" dataKey="type" stroke="#4A5880" fontSize={11} fontFamily="IBM Plex Sans" width={110} />
-              <Tooltip contentStyle={chartTooltipStyle} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
-              <Bar dataKey="count" radius={[0, 4, 4, 0]}>
-                {crimeTypes.map((entry, index) => (
-                  <rect key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {(() => {
+            const yAxisWidth = crimeTypes.length > 0
+              ? Math.min(240, Math.max(120, Math.max(...crimeTypes.map((d) => (d.type || "").length)) * 7))
+              : 140;
+            const chartHeight = Math.max(280, crimeTypes.length * 36 + 40);
+            return (
+              <ResponsiveContainer width="100%" height={chartHeight}>
+                <BarChart data={crimeTypes} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2A3F6F" horizontal={false} />
+                  <XAxis type="number" stroke="#4A5880" fontSize={10} fontFamily="IBM Plex Mono" />
+                  <YAxis
+                    type="category" dataKey="type" stroke="#4A5880" fontSize={11} fontFamily="IBM Plex Sans"
+                    width={yAxisWidth} tick={{ fill: "#8899BB", fontSize: 11, fontFamily: "IBM Plex Sans" }}
+                  />
+                  <Tooltip contentStyle={chartTooltipStyle} cursor={{ fill: "rgba(255,255,255,0.05)" }} />
+                  <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                    {crimeTypes.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            );
+          })()}
         </div>
         <div className="flex items-center gap-3 mt-3">
           <button className="h-8 px-3 rounded text-xs font-medium flex items-center gap-2" style={{ color: "var(--color-azure)", border: "1px solid var(--color-border)" }}>

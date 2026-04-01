@@ -7,7 +7,7 @@ import {
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/", minRole: "Viewer" },
-  { label: "Risk Heatmap", icon: MapPin, path: "/heatmap", minRole: "Viewer" },
+  //{ label: "Risk Heatmap", icon: MapPin, path: "/heatmap", minRole: "Viewer" },
   { label: "Thematic Map", icon: Map, path: "/map", minRole: "Viewer" },
   { label: "Network Graph", icon: Network, path: "/network", minRole: "Analyst" },
   { label: "Trend Analysis", icon: TrendingUp, path: "/trends", minRole: "Viewer" },

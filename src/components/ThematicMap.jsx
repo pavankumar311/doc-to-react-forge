@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import L from "leaflet";
-import { CircleMarker, GeoJSON, MapContainer, Pane, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, TileLayer, Tooltip, useMap } from "react-leaflet";
 
 const CITY_CENTER = [41.84, -87.63];
 const DETAIL_ZOOM_THRESHOLD = 13;
@@ -90,6 +90,7 @@ export default function ThematicMap({
   onSelectIncident,
   activeIncidentId,
   showChoropleth = true,
+  stations = [],
 }) {
   const riskMap = useMemo(() => {
     const map = new Map();
@@ -189,6 +190,76 @@ export default function ThematicMap({
         );
       })}
 
+      <Pane name="stations-pane" style={{ zIndex: 650 }}>
+        {stations?.map((s) => {
+          const lat = parseFloat(s.latitude);
+          const lon = parseFloat(s.longitude);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+          return (
+            <Marker
+              key={s.district_id || `${lat}-${lon}-${Math.random()}`}
+              position={[lat, lon]}
+              icon={L.divIcon({
+                html: `
+                  <div style="
+                    background: #1e40af;
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 50%;
+                    border: 2.5px solid #f8fafc;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                    font-size: 16px;
+                    cursor: pointer;
+                    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                  " 
+                  onmouseover="this.style.transform='scale(1.25)'; this.style.backgroundColor='#3b82f6'; this.style.borderColor='#ffffff';"
+                  onmouseout="this.style.transform='scale(1)'; this.style.backgroundColor='#1e40af'; this.style.borderColor='#f8fafc';"
+                  >🏛️</div>
+                `,
+                className: "police-station-marker",
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+              })}
+              eventHandlers={{
+                click: () => onSelectDistrict({ district_id: s.district_id }),
+              }}
+            >
+              <Tooltip direction="top" offset={[0, -10]} opacity={1}>
+                <div style={{ backgroundColor: "#0f172a", border: "1px solid #1e40af", padding: "12px", borderRadius: "12px", minWidth: "190px", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.4)" }}>
+                  <div style={{ fontSize: "10px", fontWeight: "900", textTransform: "uppercase", color: "#3b82f6", marginBottom: "6px", letterSpacing: "0.15em" }}>
+                    Public Safety Hub
+                  </div>
+                  <div style={{ fontSize: "15px", fontStyle: "italic", fontWeight: "800", color: "#f8fafc", marginBottom: "4px" }}>
+                    {s.district_name || "Headquarters"} Station
+                  </div>
+                  <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "10px", lineHeight: "1.4" }}>
+                    {s.address}
+                  </div>
+                  
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", borderTop: "1px solid #1e293b", paddingTop: "10px" }}>
+                    {s.phone && (
+                      <a 
+                        href={`tel:${s.phone}`}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ fontSize: "12px", color: "#60a5fa", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px", textDecoration: "none" }}
+                      >
+                        <span style={{ filter: "grayscale(1) brightness(1.5)" }}>📞</span> {s.phone}
+                      </a>
+                    )}
+                    <div style={{ fontSize: "10px", color: "#475569", fontWeight: "600", textTransform: "uppercase" }}>
+                      District ID: <span style={{ color: "#94a3b8" }}>{s.district_id}</span>
+                    </div>
+                  </div>
+                </div>
+              </Tooltip>
+            </Marker>
+          );
+        })}
+      </Pane>
+
       {showBlocks && mapZoom >= DETAIL_ZOOM_THRESHOLD && blockMarkers.map((block) => (
         <CircleMarker
           key={block.block_id}
@@ -207,7 +278,6 @@ export default function ThematicMap({
             {Number.isFinite(Number(block.risk_score)) && (
               <div className="text-[10px]">Risk score: {Number(block.risk_score).toFixed(2)}</div>
             )}
-            {block.risk_tier && <div className="text-[10px]">Risk tier: {block.risk_tier}</div>}
           </Tooltip>
         </CircleMarker>
       ))}

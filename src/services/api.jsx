@@ -33,10 +33,10 @@ import {
 // ── Configuration ──────────────────────────────────────────────────────
 // const API_BASE_URL = "https://api.gscip.gov/v1";
 // const API_KEY = process.env.REACT_APP_GSCIP_API_KEY || "";
-const DASHBOARD_API_BASE = "http://localhost:9000/api/v1/dashboard";
-const REPORTS_API_BASE = "http://localhost:9000/api/v1/reports";
+const DASHBOARD_API_BASE = "http://localhost:9001/api/v1/dashboard";
+const REPORTS_API_BASE = "http://localhost:9001/api/v1/reports";
 export const AUTH_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NDk0MTEyOSwgImV4cCI6IDE3NzUwMjc1Mjl9.e9mRHx_JZvs33wyMPapqPFdxh1nbXT9Vv59nwpSAdp4";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NTAyNDExMywgImV4cCI6IDE3NzUxMTA1MTN9.6gi6yo_r_YfG_cNy4OdB91Bj3aafFL7PkeTPZN_8j8U";
 
 function normalizeDistrictId(value) {
   if (value == null) return "";
@@ -122,52 +122,13 @@ function districtKey(id) {
   return `district_${normalizeDistrictId(id)}`;
 }
 
-// ── Helper: authenticated fetch ────────────────────────────────────────
-// async function apiFetch(endpoint, options = {}) {
-//   const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-//     headers: {
-//       "Content-Type": "application/json",
-//       "Authorization": `Bearer ${API_KEY}`,
-//       ...options.headers,
-//     },
-//     ...options,
-//   });
-//   if (!res.ok) {
-//     const error = await res.json().catch(() => ({ message: res.statusText }));
-//     throw new Error(error.message || `API error ${res.status}`);
-//   }
-//   return res.json();
-// }
-
 // ── Auth / User ────────────────────────────────────────────────────────
 export async function fetchCurrentUser() {
-  // Real API implementation:
-  // try {
-  //   const data = await apiFetch("/auth/me");
-  //   return data.user;
-  // } catch (err) {
-  //   console.error("fetchCurrentUser failed:", err);
-  //   throw err;
-  // }
-
-  // Mock fallback:
   return Promise.resolve(currentUser);
 }
 
 // ── Dashboard KPIs ─────────────────────────────────────────────────────
 export async function fetchKPIs(filters = {}) {
-  // Real API implementation:
-  // try {
-  //   const params = new URLSearchParams();
-  //   if (filters.district) params.append("district", filters.district);
-  //   if (filters.dateRange) params.append("range", filters.dateRange);
-  //   const data = await apiFetch(`/dashboard/kpis?${params}`);
-  //   return data;
-  // } catch (err) {
-  //   console.error("fetchKPIs failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve(kpiData);
 }
 
@@ -206,18 +167,6 @@ export async function fetchTopRiskBlocks({ filters, limit = 5, districtIdByName,
 }
 
 export async function fetchAlerts(filters = {}) {
-  // Real API implementation:
-  // try {
-  //   const params = new URLSearchParams();
-  //   if (filters.type) params.append("type", filters.type);
-  //   if (filters.limit) params.append("limit", filters.limit);
-  //   const data = await apiFetch(`/alerts?${params}`);
-  //   return data.alerts;
-  // } catch (err) {
-  //   console.error("fetchAlerts failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve(alerts);
 }
 
@@ -261,17 +210,6 @@ export async function fetchCrimeTypes({ filters, districtIdByName } = {}) {
 }
 
 export async function fetchWeeklyTrend(filters = {}) {
-  // Real API implementation:
-  // try {
-  //   const params = new URLSearchParams();
-  //   if (filters.district) params.append("district", filters.district);
-  //   const data = await apiFetch(`/trends/weekly?${params}`);
-  //   return data.trend;
-  // } catch (err) {
-  //   console.error("fetchWeeklyTrend failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve(weeklyTrend);
 }
 
@@ -356,157 +294,47 @@ export async function fetchRollingTrend({ filters, districtIdByName } = {}) {
   }
 }
 export async function fetchTrendData(filters = {}) {
-  // Real API implementation:
-  // try {
-  //   const params = new URLSearchParams();
-  //   if (filters.district) params.append("district", filters.district);
-  //   if (filters.dateFrom) params.append("from", filters.dateFrom);
-  //   if (filters.dateTo) params.append("to", filters.dateTo);
-  //   if (filters.granularity) params.append("granularity", filters.granularity);
-  //   const data = await apiFetch(`/trends/timeseries?${params}`);
-  //   return data.series;
-  // } catch (err) {
-  //   console.error("fetchTrendData failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve(trendData);
 }
 
 export async function fetchSpikeEvents(filters = {}) {
-  // Real API implementation:
-  // try {
-  //   const params = new URLSearchParams();
-  //   if (filters.district) params.append("district", filters.district);
-  //   if (filters.threshold) params.append("threshold", filters.threshold);
-  //   const data = await apiFetch(`/trends/spikes?${params}`);
-  //   return data.events;
-  // } catch (err) {
-  //   console.error("fetchSpikeEvents failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve(spikeEvents);
 }
 
 // ── Heatmap ────────────────────────────────────────────────────────────
 export async function fetchHeatmapData(filters = {}) {
-  // Real API implementation:
-  // try {
-  //   const params = new URLSearchParams();
-  //   if (filters.district) params.append("district", filters.district);
-  //   if (filters.crimeType) params.append("crime_type", filters.crimeType);
-  //   if (filters.riskTier) params.append("tier", filters.riskTier);
-  //   const data = await apiFetch(`/heatmap/blocks?${params}`);
-  //   return data; // { blocks: [...], legend: {...} }
-  // } catch (err) {
-  //   console.error("fetchHeatmapData failed:", err);
-  //   throw err;
-  // }
-
-  // Mock: returns top risk blocks as heatmap cells
   return Promise.resolve(topRiskBlocks);
 }
 
 // ── Network Graph ──────────────────────────────────────────────────────
 export async function fetchNetworkGraph(filters = {}) {
-  // Real API implementation:
-  // try {
-  //   const params = new URLSearchParams();
-  //   if (filters.district) params.append("district", filters.district);
-  //   if (filters.community) params.append("community", filters.community);
-  //   if (filters.minWeight) params.append("min_weight", filters.minWeight);
-  //   const data = await apiFetch(`/network/graph?${params}`);
-  //   return { nodes: data.nodes, edges: data.edges };
-  // } catch (err) {
-  //   console.error("fetchNetworkGraph failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve({ nodes: networkNodes, edges: networkEdges });
 }
 
 // ── Block Detail ───────────────────────────────────────────────────────
 export async function fetchBlockDetail(blockId) {
-  // Real API implementation:
-  // try {
-  //   const data = await apiFetch(`/blocks/${blockId}`);
-  //   return data;
-  // } catch (err) {
-  //   console.error("fetchBlockDetail failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve(blockDetail);
 }
 
 export async function fetchBlockTimeline(blockId, days = 30) {
-  // Real API implementation:
-  // try {
-  //   const data = await apiFetch(`/blocks/${blockId}/timeline?days=${days}`);
-  //   return data.timeline;
-  // } catch (err) {
-  //   console.error("fetchBlockTimeline failed:", err);
-  //   throw err;
-  // }
-
-  // Mock: generate timeline from trend data
   return Promise.resolve(trendData.slice(0, days));
 }
 
 // ── Models ─────────────────────────────────────────────────────────────
 export async function fetchModelVersions() {
-  // Real API implementation:
-  // try {
-  //   const data = await apiFetch("/models/versions");
-  //   return data.versions;
-  // } catch (err) {
-  //   console.error("fetchModelVersions failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve(modelVersions);
 }
 
 export async function fetchSHAPFeatures(modelVersion) {
-  // Real API implementation:
-  // try {
-  //   const data = await apiFetch(`/models/${modelVersion}/shap`);
-  //   return data.features;
-  // } catch (err) {
-  //   console.error("fetchSHAPFeatures failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve(shapFeatures);
 }
 
 export async function activateModelVersion(version) {
-  // Real API implementation:
-  // try {
-  //   const data = await apiFetch(`/models/${version}/activate`, { method: "POST" });
-  //   return data;
-  // } catch (err) {
-  //   console.error("activateModelVersion failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve({ success: true, activatedVersion: version });
 }
 
 // ── Fairness / Bias ────────────────────────────────────────────────────
 export async function fetchBiasData(filters = {}) {
-  // Real API implementation:
-  // try {
-  //   const params = new URLSearchParams();
-  //   if (filters.threshold) params.append("threshold", filters.threshold);
-  //   const data = await apiFetch(`/fairness/bias?${params}`);
-  //   return { byDistrict: data.byDistrict, byCrimeType: data.byCrimeType };
-  // } catch (err) {
-  //   console.error("fetchBiasData failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve({ byDistrict: biasData, byCrimeType: biasPerCrimeType });
 }
 
@@ -581,31 +409,6 @@ export async function downloadReport(reportId) {
 
 // ── Chat / NL Query ────────────────────────────────────────────────────
 export async function sendChatMessage(message, context = {}) {
-  // Real API implementation:
-  // try {
-  //   const data = await apiFetch("/chat/query", {
-  //     method: "POST",
-  //     body: JSON.stringify({
-  //       message,
-  //       district: context.district,
-  //       dateRange: context.dateRange,
-  //       conversationId: context.conversationId,
-  //     }),
-  //   });
-  //   return {
-  //     role: "assistant",
-  //     content: data.response,
-  //     source: data.source,
-  //     model: data.model,
-  //     actions: data.suggestedActions,
-  //     aql: data.generatedAQL,
-  //   };
-  // } catch (err) {
-  //   console.error("sendChatMessage failed:", err);
-  //   throw err;
-  // }
-
-  // Mock: simulated delay + canned response
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve({
@@ -620,100 +423,41 @@ export async function sendChatMessage(message, context = {}) {
 }
 
 export async function fetchSuggestedPrompts(context = {}) {
-  // Real API implementation:
-  // try {
-  //   const data = await apiFetch("/chat/suggestions", {
-  //     method: "POST",
-  //     body: JSON.stringify({ district: context.district }),
-  //   });
-  //   return data.prompts;
-  // } catch (err) {
-  //   console.error("fetchSuggestedPrompts failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve(suggestedPrompts);
 }
 
 // ── Audit Logs ─────────────────────────────────────────────────────────
 export async function fetchAuditLogs(filters = {}) {
-  // Real API implementation:
-  // try {
-  //   const params = new URLSearchParams();
-  //   if (filters.action) params.append("action", filters.action);
-  //   if (filters.user) params.append("user", filters.user);
-  //   if (filters.from) params.append("from", filters.from);
-  //   if (filters.to) params.append("to", filters.to);
-  //   if (filters.page) params.append("page", filters.page);
-  //   if (filters.limit) params.append("limit", filters.limit);
-  //   const data = await apiFetch(`/audit/logs?${params}`);
-  //   return data.logs;
-  // } catch (err) {
-  //   console.error("fetchAuditLogs failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve(auditLogs);
 }
 
 // ── Districts ──────────────────────────────────────────────────────────
 export async function fetchDistricts() {
-  // Real API implementation:
-  // try {
-  //   const data = await apiFetch("/districts");
-  //   return data.districts;
-  // } catch (err) {
-  //   console.error("fetchDistricts failed:", err);
-  //   throw err;
-  // }
-
-  return Promise.resolve(districts);
+  const res = await fetch(`${DASHBOARD_API_BASE}/districts`, {
+    headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+  });
+  if (!res.ok) throw new Error("Districts fetch failed");
+  return await res.json();
 }
 
 // ── Settings ───────────────────────────────────────────────────────────
 export async function updateSettings(settings) {
-  // Real API implementation:
-  // try {
-  //   const data = await apiFetch("/settings", {
-  //     method: "PUT",
-  //     body: JSON.stringify(settings),
-  //   });
-  //   return data;
-  // } catch (err) {
-  //   console.error("updateSettings failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve({ success: true, ...settings });
 }
 
 // ── Data Ingestion (Admin) ─────────────────────────────────────────────
 export async function triggerIngestion(source = "cpd_api") {
-  // Real API implementation:
-  // try {
-  //   const data = await apiFetch("/admin/ingest", {
-  //     method: "POST",
-  //     body: JSON.stringify({ source }),
-  //   });
-  //   return data; // { jobId, status, recordsQueued }
-  // } catch (err) {
-  //   console.error("triggerIngestion failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve({ jobId: Date.now(), status: "queued", recordsQueued: 2341 });
 }
 
 export async function fetchIngestionStatus(jobId) {
-  // Real API implementation:
-  // try {
-  //   const data = await apiFetch(`/admin/ingest/${jobId}/status`);
-  //   return data;
-  // } catch (err) {
-  //   console.error("fetchIngestionStatus failed:", err);
-  //   throw err;
-  // }
-
   return Promise.resolve({ jobId, status: "complete", recordsProcessed: 2341 });
 }
 
+export async function fetchPoliceStations() {
+  const res = await fetch(`${DASHBOARD_API_BASE}/map/police-stations`, {
+    headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+  });
+  if (!res.ok) throw new Error("Police stations fetch failed");
+  return await res.json();
+}

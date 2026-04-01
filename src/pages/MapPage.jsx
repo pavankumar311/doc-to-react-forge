@@ -6,13 +6,9 @@ import ThematicMap from "../components/ThematicMap";
 import ThematicLegend from "../components/ThematicLegend";
 import { HeatmapSkeleton } from "../components/Skeletons";
 import { useFilters } from "../contexts/FilterContext";
-import { AUTH_TOKEN } from "../services/api";
+import { AUTH_TOKEN, fetchPoliceStations } from "../services/api";
 
-// UI Components
-import { Calendar } from "../components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
-
-const BASE_URL = "http://localhost:9000";
+const BASE_URL = "http://localhost:9001";
 const THEMATIC_COLORS = ["#fde68a", "#fbbf24", "#f59e0b", "#f97316", "#ef4444"];
 
 /* ── Inline Component: DateInput (Styled like Home Page) ──────────────── */
@@ -30,20 +26,12 @@ function DateInput({ label, value, onChange }) {
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5 text-foreground">
       <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
-      <Popover>
-        <PopoverTrigger asChild>
-          <button className="flex items-center gap-1.5 h-8 px-3 rounded text-[11px] font-medium border border-border bg-background text-foreground hover:bg-accent/40 transition-colors">
-            <CalendarIcon className="h-3.5 w-3.5 opacity-60 text-azure" />
-            <span>{display}</span>
-            <ChevronDown className="h-3 w-3 ml-auto opacity-40" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start" style={{ zIndex: 2000 }}>
-          <Calendar mode="single" selected={isValid ? parsed : undefined} onSelect={handleSelect} className="p-3 shadow-2xl" />
-        </PopoverContent>
-      </Popover>
+      <button className="flex items-center gap-1.5 h-8 px-3 rounded text-[11px] font-medium border border-border bg-background hover:bg-accent/40 transition-colors">
+        <CalendarIcon className="h-3.5 w-3.5 opacity-60 text-azure" />
+        <span>{display}</span>
+      </button>
     </div>
   );
 }
@@ -76,7 +64,7 @@ const buildBins = (values, count) => {
   for (let i = 0; i < count; i += 1) {
     const minIdx = Math.floor((i / count) * lastIdx);
     const maxIdx = Math.floor(((i + 1) / count) * lastIdx);
-    bins.push({ min: sorted[minIdx], max: sorted[maxIdx] });
+    bins.push({ min: sorted[minIdx] || 0, max: sorted[maxIdx] || 100 });
   }
   return bins;
 };
@@ -97,8 +85,10 @@ export default function MapPage() {
 
   const [selectedDistrictId, setSelectedDistrictId] = useState("");
   const [selectedIncident, setSelectedIncident] = useState(null);
+  const [stations, setStations] = useState([]);
+
   const [mapZoom, setMapZoom] = useState(11);
-  const [viewMode, setViewMode] = useState("density"); // density (grid) vs points (incidents)
+  const [viewMode, setViewMode] = useState("density"); // density vs points
   const [showArrests, setShowArrests] = useState(false);
   const [showDomestic, setShowDomestic] = useState(false);
 
@@ -128,12 +118,6 @@ export default function MapPage() {
     [riskData, selectedDistrictId]
   );
 
-  // Sync with global
-  useEffect(() => {
-    if (globalFilters.dateFrom) setLocalDateFrom(globalFilters.dateFrom);
-    if (globalFilters.dateTo) setLocalDateTo(globalFilters.dateTo);
-  }, [globalFilters.dateFrom, globalFilters.dateTo]);
-
   // Initial load
   useEffect(() => {
     const loadBootstrap = async () => {
@@ -145,17 +129,31 @@ export default function MapPage() {
           }),
           fetch(`${BASE_URL}/api/v1/dashboard/filters`, {
             headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
-          })
+          }),
         ]);
 
         if (!districtsRes.ok) throw new Error("Districts request failed");
-        if (!filtersRes.ok) throw new Error("Filters request failed");
-
         const districtsData = await districtsRes.json();
-        const filtersData = await filtersRes.json();
+        const filtersData = await filtersRes.ok ? await filtersRes.json() : null;
 
         setDistricts(districtsData || []);
         setFilterOptions(filtersData);
+
+        // Fetch stations separately so it doesn't block critical map data
+        try {
+          const stationsRes = await fetch(`${BASE_URL}/api/v1/dashboard/map/police-stations`, {
+            headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+          });
+          const stationsData = await stationsRes.json();
+          // Extract array even if wrapped in { stations: [] } or { data: [] }
+          const stationList = Array.isArray(stationsData) 
+            ? stationsData 
+            : (stationsData?.stations || stationsData?.data || []);
+          setStations(stationList);
+        } catch (sErr) {
+          console.warn("Station markers failed to load, continuing map render:", sErr);
+          setStations([]);
+        }
 
         if (!localDateFrom || !localDateTo) {
           const maxDate = filtersData?.date_range?.max_date;
@@ -172,15 +170,6 @@ export default function MapPage() {
     loadBootstrap();
   }, []);
 
-  // Preset Logic
-  useEffect(() => {
-    if (!filterOptions || localDatePreset === "custom") return;
-    const maxDate = filterOptions?.date_range?.max_date;
-    const range = buildPresetRange(Number(localDatePreset), maxDate);
-    setLocalDateFrom(range.from);
-    setLocalDateTo(range.to);
-  }, [localDatePreset, filterOptions]);
-
   // Map Data Loading
   useEffect(() => {
     const loadMapData = async () => {
@@ -188,46 +177,26 @@ export default function MapPage() {
       setLoadingMap(true);
       setError("");
       try {
-        const riskParams = new URLSearchParams({
+        const commonParams = new URLSearchParams({
           date_from: localDateFrom,
           date_to: localDateTo,
-        });
-
-        const blocksParams = new URLSearchParams({
-          date_from: localDateFrom,
-          date_to: localDateTo,
-          min_count: "1",
-          limit: "5000",
         });
 
         if (localCrimeTypeIds.size > 0) {
-          const ids = Array.from(localCrimeTypeIds).join(",");
-          riskParams.set("crime_type_ids", ids);
-          blocksParams.set("crime_type_ids", ids);
+          commonParams.set("crime_type_ids", Array.from(localCrimeTypeIds).join(","));
         }
+        if (showArrests) commonParams.set("is_arrest", "true");
+        if (showDomestic) commonParams.set("is_domestic", "true");
 
-        if (showArrests) {
-          riskParams.set("is_arrest", "true");
-          blocksParams.set("is_arrest", "true");
-        }
-        if (showDomestic) {
-          riskParams.set("is_domestic", "true");
-          blocksParams.set("is_domestic", "true");
-        }
-
-        const riskUrl = `${BASE_URL}/api/v1/dashboard/district-risk?${riskParams.toString()}`;
-        const blocksUrl = `${BASE_URL}/api/v1/dashboard/map/blocks?${blocksParams.toString()}`;
-        const incidentsUrl = `${BASE_URL}/api/v1/dashboard/map/incidents?${riskParams.toString()}&limit=1000`;
+        const riskUrl = `${BASE_URL}/api/v1/dashboard/district-risk?${commonParams.toString()}`;
+        const blocksUrl = `${BASE_URL}/api/v1/dashboard/map/blocks?${commonParams.toString()}&limit=5000`;
+        const incidentsUrl = `${BASE_URL}/api/v1/dashboard/map/incidents?${commonParams.toString()}&limit=1000`;
 
         const [riskRes, blocksRes, incidentsRes] = await Promise.all([
           fetch(riskUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
           fetch(blocksUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
           fetch(incidentsUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
         ]);
-
-        if (!riskRes.ok) throw new Error("District risk request failed");
-        if (!blocksRes.ok) throw new Error("Blocks request failed");
-        if (!incidentsRes.ok) throw new Error("Incidents request failed");
 
         const riskJson = await riskRes.json();
         const blocksJson = await blocksRes.json();
@@ -238,7 +207,7 @@ export default function MapPage() {
         setIncidents(incidentsJson || []);
       } catch (err) {
         console.error(err);
-        setError(err.message || "Failed to load map data");
+        setError("Failed to sync map forensics");
       } finally {
         setLoadingMap(false);
       }
@@ -258,114 +227,80 @@ export default function MapPage() {
 
   const onZoomChange = useCallback((zoom) => setMapZoom(zoom), []);
 
-  if (loading) {
-    return <HeatmapSkeleton />;
-  }
+  if (loading) return <HeatmapSkeleton />;
 
   return (
     <div className="animate-in fade-in duration-500">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>Thematic Map</h1>
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>Thematic Map Analysis</h1>
+          <p className="text-xs text-muted-foreground mt-1">Cross-sectional analysis of crime density and risk distribution</p>
+        </div>
         <div className="flex items-center gap-2">
           <button
-            className="h-8 px-4 rounded text-[11px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all hover:bg-accent/10 border border-border"
-            style={{ color: "var(--color-azure)" }}
+            className={`h-8 px-4 rounded text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-all border ${viewMode === "points" ? "bg-azure text-white border-azure" : "border-border text-azure"}`}
             onClick={() => setViewMode((v) => (v === "density" ? "points" : "density"))}
           >
-            <Layers size={14} /> {viewMode === "points" ? "Point Analysis" : "Grid Density"}
+            <Layers size={14} /> {viewMode === "points" ? "Incident View" : "Density View"}
           </button>
-          <button className="h-8 px-4 rounded text-[11px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all hover:bg-accent/10 border border-border" style={{ color: "var(--color-azure)" }}>
-            <Download size={14} /> Export Map
+          <button className="h-8 px-4 rounded text-[10px] font-black uppercase tracking-widest flex items-center gap-2 border border-border text-muted-foreground hover:text-foreground">
+            <Download size={14} /> Snapshot
           </button>
         </div>
       </div>
 
       <div className="flex flex-col gap-4 mb-6">
-        {/* Filters Top Row */}
-        <div className="flex flex-wrap items-center gap-8 p-5 rounded-xl transition-all" style={{ background: "rgba(255,255,255,0.015)", border: "1px solid var(--color-border)", backdropFilter: "blur(8px)" }}>
+        <div className="flex flex-wrap items-center gap-6 p-5 rounded-xl border border-border bg-accent/5 backdrop-blur-md">
           <div className="space-y-1.5 min-w-[140px]">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              Preset Period
-            </label>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Time Window</label>
             <select
               value={localDatePreset}
               onChange={e => setLocalDatePreset(e.target.value)}
-              className="h-8 w-full rounded bg-background border border-border px-3 text-[11px] font-medium focus:ring-1 focus:ring-azure cursor-pointer"
+              className="h-8 w-full rounded bg-background border border-border px-3 text-[11px] font-bold"
             >
               <option value="7">Last 7 Days</option>
               <option value="30">Last 30 Days</option>
               <option value="90">Last 90 Days</option>
-              <option value="custom">Custom Range</option>
             </select>
           </div>
 
-          {localDatePreset === "custom" && (
-            <div className="flex items-center gap-4 animate-in slide-in-from-left-2 duration-300">
-              <DateInput label="Start Date" value={localDateFrom} onChange={setLocalDateFrom} />
-              <div className="h-4 w-px bg-border mt-5" />
-              <DateInput label="End Date" value={localDateTo} onChange={setLocalDateTo} />
-            </div>
-          )}
-
           <div className="space-y-1.5 min-w-[180px]">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              Focus Area
-            </label>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Focus District</label>
             <select
-              value={selectedDistrictId}
+              value={selectedDistrictId || ""}
               onChange={(e) => setSelectedDistrictId(e.target.value)}
-              className="h-8 w-full rounded bg-background border border-border px-3 text-[11px] font-medium focus:ring-1 focus:ring-azure cursor-pointer"
+              className="h-8 w-full rounded bg-background border border-border px-3 text-[11px] font-bold text-azure"
             >
-              <option value="">Full City Dashboard</option>
-              {districts.map((district) => (
-                <option key={district.district_id} value={district.district_id}>
-                  {district.district_name}
-                </option>
+              <option value="">Full City Oversight</option>
+              {districts.map((d) => (
+                <option key={d.district_id} value={d.district_id}>{d.district_name}</option>
               ))}
             </select>
           </div>
 
-          <div className="flex flex-col gap-2 border-l border-border pl-8">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Incident Layers</label>
-            <div className="flex items-center gap-5">
+          <div className="flex flex-col gap-2 border-l border-border pl-6 ml-2">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Quick Filters</label>
+            <div className="flex items-center gap-4">
               <label className="flex items-center gap-2 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={showArrests}
-                  onChange={e => setShowArrests(e.target.checked)}
-                  className="w-4 h-4 rounded border-border bg-transparent text-azure focus:ring-0 transition-all group-hover:border-azure"
-                />
-                <span className="text-[11px] font-medium group-hover:text-foreground transition-colors" style={{ color: "var(--color-text-muted)" }}>Arrests</span>
+                <input type="checkbox" checked={showArrests} onChange={e => setShowArrests(e.target.checked)} className="w-4 h-4 rounded border-border" />
+                <span className="text-[11px] font-bold text-muted-foreground group-hover:text-foreground">Arrests Only</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={showDomestic}
-                  onChange={e => setShowDomestic(e.target.checked)}
-                  className="w-4 h-4 rounded border-border bg-transparent text-azure focus:ring-0 transition-all group-hover:border-azure"
-                />
-                <span className="text-[11px] font-medium group-hover:text-foreground transition-colors" style={{ color: "var(--color-text-muted)" }}>Domestic</span>
+                <input type="checkbox" checked={showDomestic} onChange={e => setShowDomestic(e.target.checked)} className="w-4 h-4 rounded border-border" />
+                <span className="text-[11px] font-bold text-muted-foreground group-hover:text-foreground">Domestic Incidents</span>
               </label>
             </div>
           </div>
         </div>
 
-        {/* Crime Type Chips */}
-        <div className="flex flex-wrap gap-2.5">
-          <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-accent/5 border border-transparent mr-1">
-            <Filter size={12} className="text-azure" />
-            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Crime Types</span>
-          </div>
+        <div className="flex flex-wrap gap-2">
           {filterOptions?.crime_types?.map(type => {
             const active = localCrimeTypeIds.has(type.crime_type_id);
             return (
               <button
                 key={type.crime_type_id}
                 onClick={() => toggleCrimeType(type.crime_type_id)}
-                className={`px-3.5 py-1.5 rounded-full text-[10px] font-bold tracking-tight transition-all border ${active
-                    ? "bg-azure/10 border-azure text-azure shadow-[0_0_15px_rgba(33,150,243,0.2)] scale-[1.02]"
-                    : "border-border text-muted-foreground/80 hover:border-muted-foreground/90 hover:bg-accent/5"
-                  }`}
+                className={`px-3 py-1 rounded-full text-[10px] font-bold border transition-all ${active ? "bg-azure/20 border-azure text-azure shadow-lg shadow-azure/10 scale-105" : "border-border text-muted-foreground hover:border-gray-500"}`}
               >
                 {type.primary_type}
               </button>
@@ -374,172 +309,96 @@ export default function MapPage() {
         </div>
       </div>
 
-      {error && (
-        <div className="mb-4 text-xs p-4 rounded-lg bg-red-500/5 border border-red-500/20 flex items-center gap-3 animate-in shake duration-500" style={{ color: "#ef4444" }}>
-          <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-          <span><strong>API Connection Error:</strong> {error}</span>
-          <button onClick={() => window.location.reload()} className="ml-auto text-azure underline">Retry</button>
-        </div>
-      )}
-
-      <div className="flex gap-5" style={{ height: "calc(100vh - 380px)" }}>
-        <div className="flex-1 relative rounded-2xl overflow-hidden glass-morphism shadow-2xl" style={{ border: "1px solid var(--color-border)", minHeight: "450px" }}>
+      <div className="flex gap-5" style={{ height: "calc(100vh - 360px)" }}>
+        <div className="flex-1 relative rounded-2xl overflow-hidden border border-border shadow-2xl bg-black">
           <ThematicMap
             districts={districts}
             riskData={riskData}
             bins={bins}
             colors={THEMATIC_COLORS}
             selectedDistrictId={selectedDistrictId}
-            onSelectDistrict={(district) => {
-              setSelectedDistrictId(district.district_id);
-              setSelectedIncident(null);
-            }}
+            onSelectDistrict={(d) => setSelectedDistrictId(d.district_id)}
             onZoomChange={onZoomChange}
             mapZoom={mapZoom}
             blocks={blocks}
             showBlocks={viewMode === "density"}
             incidents={incidents}
             showIncidents={viewMode === "points"}
-            onSelectIncident={(inc) => {
-              setSelectedIncident(inc);
-              setSelectedDistrictId("");
-            }}
+            onSelectIncident={setSelectedIncident}
             activeIncidentId={selectedIncident?.incident_id}
-            showChoropleth={true}
+            stations={stations}
           />
 
-          <ThematicLegend title="Crimes per 1k" bins={bins} colors={THEMATIC_COLORS} />
+          <ThematicLegend title="Incidents per 1k" bins={bins} colors={THEMATIC_COLORS} />
 
           {loadingMap && (
-            <div
-              className="absolute top-6 left-6 rounded-full px-5 py-2.5 text-[11px] font-bold uppercase tracking-widest shadow-2xl animate-pulse"
-              style={{ background: "rgba(10,14,23,0.85)", border: "1px solid var(--color-azure)", color: "var(--color-azure)", zIndex: 1000, backdropFilter: "blur(10px)" }}
-            >
-              Computing Thematic Layers...
+            <div className="absolute top-6 left-6 rounded-lg px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-black/80 border border-azure text-azure backdrop-blur-xl animate-pulse z-[1000]">
+              Syncing Forensics...
             </div>
           )}
         </div>
 
-        {/* Side Panel: District or Incident Analysis */}
+        {/* Dynamic Side Panel */}
         {(selectedDistrict || selectedIncident) && (
-          <div className="w-[340px] rounded-2xl overflow-y-auto glass-morphism animate-in slide-in-from-right-4 duration-500 shadow-2xl" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
+          <div className="w-[340px] rounded-2xl overflow-y-auto bg-card border border-border shadow-2xl animate-in slide-in-from-right-4 duration-500">
             {selectedIncident ? (
-              /* Incident Analysis Panel */
               <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-sm font-bold tracking-tight" style={{ color: "var(--color-text-primary)" }}>Incident Forensics</h2>
-                    <span className="text-[10px] text-azure uppercase font-mono tracking-tighter">Case #{selectedIncident.incident_id.slice(-6)}</span>
-                  </div>
-                  <button onClick={() => setSelectedIncident(null)} className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors text-muted-foreground">x</button>
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-sm font-black uppercase tracking-tight text-white">Incident Forensics</h2>
+                  <button onClick={() => setSelectedIncident(null)} className="h-6 w-6 text-muted-foreground">×</button>
                 </div>
-
-                <div className="space-y-5">
-                  <div className="p-4 rounded-xl bg-azure/5 border border-azure/20">
-                    <div className="text-[10px] text-azure font-black uppercase tracking-widest mb-1">Primary Classification</div>
-                    <div className="text-base font-bold text-foreground leading-tight">{selectedIncident.primary_type}</div>
-                    <div className="text-[11px] text-muted-foreground mt-1">{selectedIncident.description}</div>
+                <div className="space-y-6">
+                  <div className="p-4 rounded-xl bg-azure/10 border border-azure/30">
+                    <div className="text-[10px] font-black text-azure uppercase tracking-wider mb-2">Classification</div>
+                    <div className="text-base font-bold text-white leading-tight">{selectedIncident.primary_type}</div>
+                    <div className="text-[11px] text-gray-400 mt-2">{selectedIncident.description}</div>
                   </div>
-
-                  <div className="grid grid-cols-1 gap-4">
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-                        <CalendarIcon size={14} className="text-muted-foreground" />
+                  <div className="space-y-4">
+                    <div>
+                      <div className="text-[9px] font-bold text-gray-500 uppercase">Location</div>
+                      <div className="text-[11px] font-medium mt-1">{selectedIncident.block_address}</div>
+                    </div>
+                    <div className="flex gap-4">
+                      <div>
+                        <div className="text-[9px] font-bold text-gray-500 uppercase">Date</div>
+                        <div className="text-[11px] font-medium mt-1">{selectedIncident.date}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">Temporal Log</div>
-                        <div className="text-[11px] font-medium text-foreground">{selectedIncident.date}</div>
+                        <div className="text-[9px] font-bold text-gray-500 uppercase">Arrest</div>
+                        <div className={`text-[11px] font-black mt-1 ${selectedIncident.is_arrest ? "text-green-500" : "text-red-500"}`}>
+                          {selectedIncident.is_arrest ? "YES" : "NO"}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-                        <Filter size={14} className="text-muted-foreground" />
-                      </div>
-                      <div>
-                        <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">Spatial Context</div>
-                        <div className="text-[11px] font-medium text-foreground">{selectedIncident.block_address}</div>
-                        <div className="text-[10px] text-muted-foreground">District {selectedIncident.district_id}</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-5 border-t border-border flex items-center gap-2">
-                    <div className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-tight ${selectedIncident.is_arrest ? "bg-emerald-500/20 text-emerald-500" : "bg-red-500/20 text-red-500"}`}>
-                      {selectedIncident.is_arrest ? "Arrest Secured" : "Unresolved"}
-                    </div>
-                    {selectedIncident.is_domestic && (
-                      <div className="px-2 py-1 rounded bg-purple-500/20 text-purple-400 text-[10px] font-black uppercase tracking-tight">
-                        Domestic
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
             ) : (
-              /* District Analysis Panel */
               <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex flex-col">
-                    <h2 className="text-sm font-bold tracking-tight" style={{ color: "var(--color-text-primary)" }}>{selectedDistrict.district_name}</h2>
-                    <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-tighter">Security Profile Analysis</span>
-                  </div>
-                  <button onClick={() => setSelectedDistrictId("")} className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-accent/20 transition-colors" style={{ color: "var(--color-text-muted)" }}>x</button>
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-sm font-black uppercase tracking-tight text-white">{selectedDistrict.district_name}</h2>
+                  <button onClick={() => setSelectedDistrictId("")} className="h-6 w-6 text-muted-foreground">×</button>
                 </div>
-
-                <div className="space-y-6">
+                <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 rounded-xl bg-accent/5 border border-border">
-                      <div className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Frequency</div>
-                      <div className="text-lg font-bold tracking-tighter">{selectedDistrictRisk?.crime_count} <span className="text-[10px] font-normal text-muted-foreground">pts</span></div>
+                    <div className="p-4 rounded-xl bg-gray-900 border border-gray-800">
+                      <div className="text-[9px] font-bold text-gray-500 uppercase mb-1">Incident Count</div>
+                      <div className="text-xl font-black">{selectedDistrictRisk?.crime_count || 0}</div>
                     </div>
-                    <div className="p-3 rounded-xl bg-accent/5 border border-border">
-                      <div className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Density</div>
-                      <div className="text-lg font-bold tracking-tighter text-azure">{Number(selectedDistrictRisk?.crimes_per_1000).toFixed(1)} <span className="text-[10px] font-normal text-muted-foreground">/1k</span></div>
-                    </div>
-                  </div>
-
-                  <div className="p-4 rounded-xl space-y-3" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid var(--color-border)" }}>
-                    <div className="flex justify-between items-center text-xs">
-                      <span style={{ color: "var(--color-text-secondary)" }}>Growth Trend (MoM):</span>
-                      <span className={`font-bold ${selectedDistrictRisk?.mom_change_pct > 0 ? "text-red-400" : "text-emerald-400"}`}>
-                        {selectedDistrictRisk?.mom_change_pct > 0 ? "↑" : "↓"} {Math.abs(selectedDistrictRisk?.mom_change_pct)}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-xs">
-                      <span style={{ color: "var(--color-text-secondary)" }}>Arrest Resolution:</span>
-                      <span className="font-bold text-foreground">{selectedDistrictRisk?.arrest_rate}%</span>
-                    </div>
-                    <div className="pt-3 border-t border-border flex justify-between items-center">
-                      <span style={{ color: "var(--color-text-secondary)" }} className="text-[11px] font-bold uppercase tracking-wider">Safety Benchmark Index</span>
-                      <span className={`px-2 py-0.5 rounded text-[11px] font-black ${selectedDistrictRisk?.relative_to_average > 1.2 ? "bg-red-500/20 text-red-500" : "bg-emerald-500/20 text-emerald-500"}`}>
-                        {selectedDistrictRisk?.relative_to_average}x
-                      </span>
+                    <div className="p-4 rounded-xl bg-gray-900 border border-gray-800">
+                      <div className="text-[9px] font-bold text-gray-500 uppercase mb-1">Density/1k</div>
+                      <div className="text-xl font-black text-azure">{Number(selectedDistrictRisk?.crimes_per_1000 || 0).toFixed(1)}</div>
                     </div>
                   </div>
 
-                  <div className="mt-8">
-                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] mb-4 text-muted-foreground/60 flex items-center gap-2">
-                      <div className="h-px flex-1 bg-border" />
-                      Top Crime Vectors
-                      <div className="h-px flex-1 bg-border" />
-                    </h3>
-                    <div className="space-y-4">
-                      {selectedDistrictRisk?.top_crime_types?.map((type, idx) => (
-                        <div key={idx} className="space-y-2">
-                          <div className="flex justify-between items-end">
-                            <span style={{ color: "var(--color-text-primary)" }} className="text-[11px] font-bold tracking-tight">{type.primary_type}</span>
-                            <span style={{ color: "var(--color-text-secondary)" }} className="text-[10px] font-mono">{type.crime_count} cases</span>
-                          </div>
-                          <div className="h-1.5 w-full rounded-full bg-accent/10 overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-primary shadow-[0_0_8px_rgba(33,150,243,0.4)]"
-                              style={{
-                                width: `${(type.crime_count / selectedDistrictRisk.crime_count) * 100}%`
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-4 rounded-xl bg-gray-900 border border-gray-800">
+                      <div className="text-[9px] font-bold text-gray-500 uppercase mb-1">Arrest Rate</div>
+                      <div className="text-xl font-black text-green-500">{selectedDistrictRisk?.arrest_rate || 0}%</div>
+                    </div>
+                    <div className="p-4 rounded-xl bg-gray-900 border border-gray-800">
+                      <div className="text-[9px] font-bold text-gray-500 uppercase mb-1">Domestic Rate</div>
+                      <div className="text-xl font-black text-purple-500">{selectedDistrictRisk?.domestic_rate || 0}%</div>
                     </div>
                   </div>
                 </div>
