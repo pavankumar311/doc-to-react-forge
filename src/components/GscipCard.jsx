@@ -6,18 +6,18 @@ export default function GscipCard({ title, subtitle, children, className = "", c
         background: "var(--color-bg-card)",
         border: "1px solid var(--color-border)",
         padding: compact ? "12px" : "20px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
       }}
       onMouseEnter={(e) => {
         if (interactive) {
           e.currentTarget.style.borderColor = "var(--color-cobalt)";
-          e.currentTarget.style.boxShadow = "0 4px 16px rgba(21,101,192,0.2)";
+          e.currentTarget.style.boxShadow = "0 4px 12px rgba(37,99,235,0.12)";
         }
       }}
       onMouseLeave={(e) => {
         if (interactive) {
           e.currentTarget.style.borderColor = "var(--color-border)";
-          e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)";
+          e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)";
         }
       }}
     >
