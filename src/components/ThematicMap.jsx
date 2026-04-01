@@ -1,7 +1,7 @@
 /** GSCIP Thematic Map v1.5 */
 import { useEffect, useMemo } from "react";
 import L from "leaflet";
-import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { CircleMarker, GeoJSON, MapContainer, Marker, Pane, TileLayer, Tooltip, useMap, Polyline } from "react-leaflet";
 
 const CITY_CENTER = [41.84, -87.63];
 const DETAIL_ZOOM_THRESHOLD = 13;
@@ -11,6 +11,34 @@ const RISK_TIER_COLORS = {
   MED: "#f97316",
   LOW: "#2563eb",
 };
+
+function haversineDistanceMiles(lat1, lon1, lat2, lon2) {
+  const R = 3958.8; // Earth radius in miles
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function getPrecinctCentroid(precinct) {
+  if (!precinct?.boundary) return CITY_CENTER;
+  try {
+    const coords = precinct.boundary.type === "Polygon" 
+      ? precinct.boundary.coordinates[0] 
+      : precinct.boundary.coordinates[0][0];
+    const lats = coords.map(c => c[1]);
+    const lons = coords.map(c => c[0]);
+    const avgLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+    const avgLon = lons.reduce((a, b) => a + b, 0) / lons.length;
+    return [avgLat, avgLon];
+  } catch (e) {
+    return CITY_CENTER;
+  }
+}
 
 const getColorForValue = (value, bins, colors) => {
   if (!Number.isFinite(value)) return "rgba(30,41,59,0.55)";
@@ -101,6 +129,8 @@ export default function ThematicMap({
   selectedBeatId,
   precincts = [],
   showPrecincts = false,
+  selectedPrecinctId,
+  onSelectPrecinct,
 }) {
   const riskMap = useMemo(() => {
     const map = new Map();
@@ -144,6 +174,37 @@ export default function ThematicMap({
         };
       })
   ), [blocks]);
+
+  const nearestStationInfo = useMemo(() => {
+    if (!selectedPrecinctId || !precincts.length || !stations.length) return null;
+    const selectedP = precincts.find(p => p.ward_precinct === selectedPrecinctId);
+    if (!selectedP) return null;
+
+    const [pLat, pLon] = getPrecinctCentroid(selectedP);
+    
+    let nearest = null;
+    let minDistance = Infinity;
+
+    stations.forEach(station => {
+      const sLat = parseFloat(station.latitude);
+      const sLon = parseFloat(station.longitude);
+      if (!Number.isFinite(sLat) || !Number.isFinite(sLon)) return;
+
+      const dist = haversineDistanceMiles(pLat, pLon, sLat, sLon);
+      if (dist < minDistance) {
+        minDistance = dist;
+        nearest = { ...station, distance: dist, sLat, sLon };
+      }
+    });
+
+    if (!nearest) return null;
+
+    return {
+      station: nearest,
+      precinctCentroid: [pLat, pLon],
+      connector: [[pLat, pLon], [nearest.sLat, nearest.sLon]]
+    };
+  }, [selectedPrecinctId, precincts, stations]);
 
   return (
     <MapContainer center={CITY_CENTER} zoom={11} scrollWheelZoom className="h-full w-full" style={{ background: "#0a0e17" }}>
@@ -208,34 +269,6 @@ export default function ThematicMap({
         })}
       </Pane>
 
-      <Pane name="precincts-pane" style={{ zIndex: 450 }}>
-        {showPrecincts && precincts.map((p) => {
-          if (!p.boundary) return null;
-          return (
-            <GeoJSON
-              key={p.ward_precinct}
-              data={p.boundary}
-              style={{
-                color: "#60a5fa",
-                weight: 1.5,
-                dashArray: "4, 6",
-                fillColor: "rgba(96, 165, 250, 0.05)",
-                fillOpacity: 0.15
-              }}
-            >
-              <Tooltip direction="top" opacity={0.97} sticky>
-                <div style={{ background: "#0f172a", border: "1px solid #1e40af", padding: "8px 12px", borderRadius: "10px", minWidth: "150px" }}>
-                  <div style={{ fontSize: "9px", fontWeight: 900, textTransform: "uppercase", color: "#60a5fa", letterSpacing: "0.12em", marginBottom: "4px" }}>Political Boundary</div>
-                  <div style={{ fontSize: "13px", fontWeight: 900, color: "#f8fafc" }}>Ward {p.ward}</div>
-                  <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "2px" }}>Precinct {p.precinct}</div>
-                  {p.shape_area && <div style={{ fontSize: "9px", color: "#475569", marginTop: "4px" }}>Area: {Number(p.shape_area / 1e6).toFixed(2)} km²</div>}
-                </div>
-              </Tooltip>
-            </GeoJSON>
-          );
-        })}
-      </Pane>
-
       <Pane name="beats-pane" style={{ zIndex: 500 }}>
         {beats.map((b) => {
           if (!b.boundary) return null;
@@ -259,7 +292,7 @@ export default function ThematicMap({
                   <div style={{ fontSize: "9px", fontWeight: 900, textTransform: "uppercase", color: "#3b82f6", letterSpacing: "0.12em", marginBottom: "6px" }}>CPD Operational Beat</div>
                   <div style={{ fontSize: "14px", fontWeight: 900, color: "#f8fafc", marginBottom: "2px" }}>Beat {b.beat_num}</div>
                   <div style={{ fontSize: "10px", color: "#94a3b8", marginBottom: "8px" }}>Sector {b.sector} · District {b.district}</div>
-                  
+
                   {localRisk ? (
                     <div style={{ borderTop: "1px solid #1e293b", paddingTop: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px" }}>
@@ -292,11 +325,44 @@ export default function ThematicMap({
         })}
       </Pane>
 
+      <Pane name="precincts-pane" style={{ zIndex: 550 }}>
+        {showPrecincts && precincts.map((p) => {
+          if (!p.boundary) return null;
+          const isSelected = selectedPrecinctId === p.ward_precinct;
+          return (
+            <GeoJSON
+              key={p.ward_precinct}
+              data={p.boundary}
+              style={{
+                color: isSelected ? "#f0c040" : "#60a5fa",
+                weight: isSelected ? 3 : 1.5,
+                dashArray: isSelected ? "0" : "4, 6",
+                fillColor: isSelected ? "#f0c040" : "rgba(96, 165, 250, 0.05)",
+                fillOpacity: isSelected ? 0.3 : 0.15
+              }}
+              eventHandlers={{
+                click: () => onSelectPrecinct?.(p)
+              }}
+            >
+              <Tooltip direction="top" opacity={0.97} sticky>
+                <div style={{ background: "#0f172a", border: "1px solid #1e40af", padding: "8px 12px", borderRadius: "10px", minWidth: "150px" }}>
+                  <div style={{ fontSize: "9px", fontWeight: 900, textTransform: "uppercase", color: "#60a5fa", letterSpacing: "0.12em", marginBottom: "4px" }}>Political Boundary</div>
+                  <div style={{ fontSize: "13px", fontWeight: 900, color: "#f8fafc" }}>Ward {p.ward}</div>
+                  <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "2px" }}>Precinct {p.precinct}</div>
+                  {p.shape_area && <div style={{ fontSize: "9px", color: "#475569", marginTop: "4px" }}>Area: {Number(p.shape_area / 1e6).toFixed(2)} km²</div>}
+                </div>
+              </Tooltip>
+            </GeoJSON>
+          );
+        })}
+      </Pane>
+
       <Pane name="stations-pane" style={{ zIndex: 650 }}>
         {showStations && stations?.map((s) => {
           const lat = parseFloat(s.latitude);
           const lon = parseFloat(s.longitude);
           if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+          const isNearest = nearestStationInfo?.station?.district_id === s.district_id;
           return (
             <Marker
               key={s.district_id || `${lat}-${lon}-${Math.random()}`}
@@ -305,35 +371,37 @@ export default function ThematicMap({
               icon={L.divIcon({
                 html: `
                   <div style="
-                    background: #1e40af;
-                    width: 32px;
-                    height: 32px;
+                    background: ${isNearest ? "#3b82f6" : "#1e40af"};
+                    width: ${isNearest ? "38px" : "32px"};
+                    height: ${isNearest ? "38px" : "32px"};
                     border-radius: 50%;
-                    border: 2.5px solid #f8fafc;
+                    border: 2.5px solid ${isNearest ? "#fff" : "#f8fafc"};
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-                    font-size: 16px;
+                    font-size: ${isNearest ? "20px" : "16px"};
                     cursor: pointer;
                     transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                    ${isNearest ? "animation: pulse-azure 2s infinite;" : ""}
                   " 
                   onmouseover="this.style.transform='scale(1.25)'; this.style.backgroundColor='#3b82f6'; this.style.borderColor='#ffffff';"
-                  onmouseout="this.style.transform='scale(1)'; this.style.backgroundColor='#1e40af'; this.style.borderColor='#f8fafc';"
-                  >🏛️</div>
+                  onmouseout="this.style.transform='scale(1)'; this.style.backgroundColor='${isNearest ? "#3b82f6" : "#1e40af"}'; this.style.borderColor='${isNearest ? "#fff" : "#f8fafc"}';"
+                  >${isNearest ? "🛡️" : "🏛️"}</div>
                 `,
                 className: "police-station-marker",
-                iconSize: [32, 32],
-                iconAnchor: [16, 16],
+                iconSize: [isNearest ? 38 : 32, isNearest ? 38 : 32],
+                iconAnchor: [isNearest ? 19 : 16, isNearest ? 19 : 16],
               })}
               eventHandlers={{
                 click: () => onSelectDistrict({ district_id: s.district_id }),
               }}
             >
               <Tooltip direction="top" offset={[0, -10]} opacity={1}>
+                {/* ... tooltip content stays the same ... */}
                 <div style={{ backgroundColor: "#0f172a", border: "1px solid #1e40af", padding: "12px", borderRadius: "12px", minWidth: "190px", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.4)" }}>
                   <div style={{ fontSize: "10px", fontWeight: "900", textTransform: "uppercase", color: "#3b82f6", marginBottom: "6px", letterSpacing: "0.15em" }}>
-                    Public Safety Hub
+                    {isNearest ? "Identified Hub" : "Public Safety Hub"}
                   </div>
                   <div style={{ fontSize: "15px", fontStyle: "italic", fontWeight: "800", color: "#f8fafc", marginBottom: "4px" }}>
                     {s.district_name || "Headquarters"} Station
@@ -341,10 +409,10 @@ export default function ThematicMap({
                   <div style={{ fontSize: "11px", color: "#94a3b8", marginBottom: "10px", lineHeight: "1.4" }}>
                     {s.address}
                   </div>
-                  
+
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px", borderTop: "1px solid #1e293b", paddingTop: "10px" }}>
                     {s.phone && (
-                      <a 
+                      <a
                         href={`tel:${s.phone}`}
                         onClick={(e) => e.stopPropagation()}
                         style={{ fontSize: "12px", color: "#60a5fa", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px", textDecoration: "none" }}
@@ -362,6 +430,20 @@ export default function ThematicMap({
           );
         })}
       </Pane>
+
+      {/* Vector Line Connecting Precinct to Station */}
+      {nearestStationInfo && (
+        <Polyline 
+          positions={nearestStationInfo.connector}
+          pathOptions={{
+            color: "#4a90d9",
+            weight: 2,
+            dashArray: "8, 12",
+            opacity: 0.8,
+            lineJoin: "round"
+          }}
+        />
+      )}
 
       <Pane name="blocks-pane" style={{ zIndex: 600 }}>
         {showBlocks && mapZoom >= DETAIL_ZOOM_THRESHOLD && blockMarkers.map((block) => (

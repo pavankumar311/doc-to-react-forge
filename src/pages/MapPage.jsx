@@ -59,6 +59,34 @@ const buildPresetRange = (presetDays, maxDate) => {
   };
 };
 
+function haversineDistanceMiles(lat1, lon1, lat2, lon2) {
+  const R = 3958.8; // Earth radius in miles
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function getPrecinctCentroid(precinct) {
+  if (!precinct?.boundary) return [41.84, -87.63];
+  try {
+    const coords = precinct.boundary.type === "Polygon"
+      ? precinct.boundary.coordinates[0]
+      : precinct.boundary.coordinates[0][0];
+    const lats = coords.map(c => c[1]);
+    const lons = coords.map(c => c[0]);
+    const avgLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+    const avgLon = lons.reduce((a, b) => a + b, 0) / lons.length;
+    return [avgLat, avgLon];
+  } catch (e) {
+    return [41.84, -87.63];
+  }
+}
+
 const buildBins = (values, count) => {
   if (!values.length) return [];
   const sorted = [...values].sort((a, b) => a - b);
@@ -91,6 +119,7 @@ export default function MapPage() {
   const [stations, setStations] = useState([]);
   const [beats, setBeats] = useState([]);
   const [precincts, setPrecincts] = useState([]);
+  const [selectedPrecinct, setSelectedPrecinct] = useState(null);
   const [beatRiskData, setBeatRiskData] = useState([]);
   const [showPoliticalWards, setShowPoliticalWards] = useState(false);
 
@@ -415,6 +444,8 @@ export default function MapPage() {
             beatRiskData={beatRiskData}
             precincts={precincts}
             showPrecincts={showPoliticalWards}
+            selectedPrecinctId={selectedPrecinct?.ward_precinct}
+            onSelectPrecinct={setSelectedPrecinct}
           />
 
           <ThematicLegend title="Incidents per 1k" bins={bins} colors={THEMATIC_COLORS} />
@@ -427,8 +458,8 @@ export default function MapPage() {
         </div>
 
         {/* Dynamic Side Panel */}
-        {(selectedDistrict || selectedIncident) && (
-          <div className="w-[340px] rounded-2xl overflow-y-auto bg-card border border-border shadow-2xl animate-in slide-in-from-right-4 duration-500">
+        {(selectedDistrict || selectedIncident || selectedPrecinct) && (
+          <div className="w-[340px] rounded-2xl overflow-y-auto bg-slate-950 border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)] animate-in slide-in-from-right-4 duration-500">
             {selectedIncident ? (
               <div className="p-6">
                 <div className="flex items-center justify-between mb-8">
@@ -461,7 +492,118 @@ export default function MapPage() {
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : selectedPrecinct ? (
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-8 border-b border-white/5 pb-4">
+                  <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Tactical Forensics</h2>
+                  <button onClick={() => setSelectedPrecinct(null)} className="h-6 w-6 text-slate-500 hover:text-white transition-colors text-lg font-bold">×</button>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-gradient-to-br from-[#f0c040]/30 to-black/40 border border-[#f0c040]/50 mb-8 shadow-xl">
+                  <div className="text-[9px] font-black text-[#f0c040] uppercase tracking-[0.25em] mb-2 opacity-90">Political Accountability</div>
+                  <div className="text-3xl font-black text-white tracking-tight">Precinct {selectedPrecinct.precinct}</div>
+                  <div className="text-[11px] text-slate-200 mt-1.5 font-bold tracking-wide italic underline decoration-[#f0c040]/30 underline-offset-4">Ward Accountability: {selectedPrecinct.ward}</div>
+                </div>
+
+                {(() => {
+                  // Find nearest station here
+                  const [pLat, pLon] = getPrecinctCentroid(selectedPrecinct);
+                  let nearest = null;
+                  let minDistance = Infinity;
+
+                  stations.forEach(s => {
+                    const lat = parseFloat(s.latitude);
+                    const lon = parseFloat(s.longitude);
+                    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+                    const d = haversineDistanceMiles(pLat, pLon, lat, lon);
+                    if (d < minDistance) {
+                      minDistance = d;
+                      nearest = { ...s, distance: d };
+                    }
+                  });
+
+                  if (!nearest) return <div className="text-[10px] text-azure font-bold uppercase tracking-widest animate-pulse p-4">Syncing Tactical Grid...</div>;
+
+                  // Find district info for the summary card
+                  const dId = String(nearest.district_id || "").padStart(3, "0");
+                  const dRisk = riskData.find(item => item.district_id === dId);
+
+                  return (
+                    <div className="space-y-6">
+                      {/* District Summary Card Integration */}
+                      {dRisk && (
+                        <div className="space-y-4 p-5 rounded-2xl bg-slate-900/60 border border-white/10 mb-4 shadow-inner">
+                          <div className="text-[9px] font-black text-white/40 uppercase tracking-[0.2em] pl-1">Response Performance</div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/40 shadow-lg">
+                              <div className="text-[8px] font-black text-emerald-400 uppercase tracking-widest mb-1.5">Arrest Rate</div>
+                              <div className="text-2xl font-black text-white">{dRisk.arrest_rate}%</div>
+                            </div>
+                            <div className="p-4 rounded-xl bg-blue-500/15 border border-blue-500/40 shadow-lg">
+                              <div className="text-[8px] font-black text-blue-400 uppercase tracking-widest mb-1.5">Domestic</div>
+                              <div className="text-2xl font-black text-white">{dRisk.domestic_rate}%</div>
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center px-2 pt-2 border-t border-white/5">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tactical Intensity</span>
+                            <span className="text-sm font-black text-white">{Number(dRisk.crimes_per_1000).toFixed(1)}<span className="text-[9px] ml-1 opacity-50">/1K</span></span>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="p-6 rounded-2xl bg-azure/10 border-2 border-azure/30 group hover:border-azure transition-all shadow-[0_10px_30px_-10px_rgba(59,130,246,0.3)]">
+                        <div className="text-[10px] font-black text-azure uppercase tracking-[0.2em] flex items-center gap-3 mb-5">
+                          <span className="w-2 h-2 rounded-full bg-azure animate-ping"></span>
+                          Operational Proximity
+                        </div>
+
+                        <div className="space-y-5">
+                          <div>
+                            <div className="text-base font-black text-white mb-1.5 leading-tight tracking-tight">
+                              {nearest.district_name} District Station
+                            </div>
+                            <div className="text-[11px] text-slate-300 leading-relaxed font-bold tracking-wide italic">
+                              {nearest.address}
+                            </div>
+                          </div>
+
+                          <div className="pt-5 border-t border-white/10 flex flex-col gap-4">
+                            <div className="flex items-center justify-between">
+                               <span className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Vector Distance</span>
+                               <span className="text-sm font-black text-white tracking-tight">
+                                 <span className="text-azure">{nearest.distance.toFixed(2)}</span> MILES
+                               </span>
+                            </div>
+                            {nearest.phone && (
+                              <div className="pt-4 border-t border-white/5 border-dashed">
+                                 <a 
+                                  href={`tel:${nearest.phone}`} 
+                                  className="w-full h-11 flex items-center justify-center gap-3 rounded-xl bg-azure/10 border border-azure/40 hover:bg-azure/20 hover:border-azure transition-all group overflow-hidden relative shadow-lg shadow-azure/10"
+                                 >
+                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full duration-700 transition-transform"></div>
+                                    <span className="text-lg">📞</span>
+                                    <div className="flex flex-col items-start leading-tight">
+                                       <span className="text-[11px] font-black uppercase tracking-widest text-azure">Engage Tactical Unit</span>
+                                       <span className="text-sm font-black text-white tabular-nums">{nearest.phone}</span>
+                                    </div>
+                                 </a>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl border border-white/5 bg-slate-900/40 flex items-center gap-4 mt-6">
+                        <div className="w-10 h-10 rounded-lg bg-azure/5 flex items-center justify-center text-azure font-black text-xl border border-azure/20 shadow-inner">⚡</div>
+                        <p className="text-[10px] text-slate-500 font-bold leading-relaxed tracking-wide italic">
+                          Tactical vector visualization active. Operational performance synchronized for nearest response hub.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : selectedDistrict ? (
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div>
@@ -494,7 +636,7 @@ export default function MapPage() {
                   </div>
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
         )}
       </div>

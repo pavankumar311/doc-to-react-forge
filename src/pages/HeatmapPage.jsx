@@ -179,7 +179,7 @@ export default function Heatmap() {
   const [incidents, setIncidents] = useState([]);
   const [blocks, setBlocks] = useState([]);
   const [filterOptions, setFilterOptions] = useState(null);
-  
+
   // Local Filter States
   const [localDateFrom, setLocalDateFrom] = useState(globalFilters.dateFrom);
   const [localDateTo, setLocalDateTo] = useState(globalFilters.dateTo);
@@ -263,7 +263,7 @@ export default function Heatmap() {
         });
 
         if (selectedDistrictId) baseParams.set("district_ids", selectedDistrictId);
-        
+
         if (localCrimeTypeIds.size > 0) {
           baseParams.set("crime_type_ids", Array.from(localCrimeTypeIds).join(","));
         }
@@ -409,9 +409,9 @@ export default function Heatmap() {
 
           {localDatePreset === "custom" && (
             <div className="flex items-center gap-4 animate-in slide-in-from-left-2 duration-300">
-               <DateInput label="Start Date" value={localDateFrom} onChange={setLocalDateFrom} />
-               <div className="h-4 w-px bg-border mt-5" />
-               <DateInput label="End Date" value={localDateTo} onChange={setLocalDateTo} />
+              <DateInput label="Start Date" value={localDateFrom} onChange={setLocalDateFrom} />
+              <div className="h-4 w-px bg-border mt-5" />
+              <DateInput label="End Date" value={localDateTo} onChange={setLocalDateTo} />
             </div>
           )}
 
@@ -437,18 +437,18 @@ export default function Heatmap() {
             <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Incident Filters</label>
             <div className="flex items-center gap-5">
               <label className="flex items-center gap-2 cursor-pointer group">
-                <input 
-                  type="checkbox" 
-                  checked={showArrests} 
+                <input
+                  type="checkbox"
+                  checked={showArrests}
                   onChange={e => setShowArrests(e.target.checked)}
                   className="w-4 h-4 rounded border-border bg-transparent text-azure focus:ring-0 transition-all group-hover:border-azure"
                 />
                 <span className="text-[11px] font-medium group-hover:text-foreground transition-colors" style={{ color: "var(--color-text-muted)" }}>Arrests</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer group">
-                <input 
-                  type="checkbox" 
-                  checked={showDomestic} 
+                <input
+                  type="checkbox"
+                  checked={showDomestic}
                   onChange={e => setShowDomestic(e.target.checked)}
                   className="w-4 h-4 rounded border-border bg-transparent text-azure focus:ring-0 transition-all group-hover:border-azure"
                 />
@@ -459,26 +459,25 @@ export default function Heatmap() {
         </div>
 
         <div className="flex flex-wrap gap-2.5">
-            <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-accent/5 border border-transparent mr-1">
-              <Filter size={12} className="text-azure" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Type Selection</span>
-            </div>
-            {filterOptions?.crime_types?.map(type => {
-              const active = localCrimeTypeIds.has(type.crime_type_id);
-              return (
-                <button
-                  key={type.crime_type_id}
-                  onClick={() => toggleCrimeType(type.crime_type_id)}
-                  className={`px-3.5 py-1.5 rounded-full text-[10px] font-bold tracking-tight transition-all border ${
-                    active 
-                    ? "bg-azure/10 border-azure text-azure shadow-[0_0_15px_rgba(33,150,243,0.2)] scale-[1.02]" 
+          <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-accent/5 border border-transparent mr-1">
+            <Filter size={12} className="text-azure" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Type Selection</span>
+          </div>
+          {filterOptions?.crime_types?.map(type => {
+            const active = localCrimeTypeIds.has(type.crime_type_id);
+            return (
+              <button
+                key={type.crime_type_id}
+                onClick={() => toggleCrimeType(type.crime_type_id)}
+                className={`px-3.5 py-1.5 rounded-full text-[10px] font-bold tracking-tight transition-all border ${active
+                    ? "bg-azure/10 border-azure text-azure shadow-[0_0_15px_rgba(33,150,243,0.2)] scale-[1.02]"
                     : "border-border text-muted-foreground/80 hover:border-muted-foreground/90 hover:bg-accent/5"
                   }`}
-                >
-                  {type.primary_type}
-                </button>
-              );
-            })}
+              >
+                {type.primary_type}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -616,56 +615,56 @@ export default function Heatmap() {
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex flex-col">
-                   <h2 className="text-sm font-bold tracking-tight" style={{ color: "var(--color-text-primary)" }}>Incident Analysis</h2>
-                   <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-tighter">Case #{selectedIncident.case_number || "N/A"}</span>
+                  <h2 className="text-sm font-bold tracking-tight" style={{ color: "var(--color-text-primary)" }}>Incident Analysis</h2>
+                  <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-tighter">Case #{selectedIncident.case_number || "N/A"}</span>
                 </div>
                 <button onClick={() => setSelectedIncident(null)} className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-accent/20 transition-colors" style={{ color: "var(--color-text-muted)" }}>x</button>
               </div>
 
               <div className="space-y-6">
-                 <div className="p-4 rounded-xl bg-accent/5 border border-border space-y-4">
-                    <div className="space-y-1">
-                       <div className="text-[10px] text-muted-foreground uppercase font-bold">Primary Offense</div>
-                       <div className="text-sm font-bold text-foreground">{selectedIncident.primary_type}</div>
+                <div className="p-4 rounded-xl bg-accent/5 border border-border space-y-4">
+                  <div className="space-y-1">
+                    <div className="text-[10px] text-muted-foreground uppercase font-bold">Primary Offense</div>
+                    <div className="text-sm font-bold text-foreground">{selectedIncident.primary_type}</div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-[10px] text-muted-foreground uppercase font-bold">Description Details</div>
+                    <div className="pl-3 border-l-2 border-azure/40 text-xs italic text-muted-foreground/90 leading-relaxed">
+                      {selectedIncident.description}
                     </div>
-                    <div className="space-y-1">
-                       <div className="text-[10px] text-muted-foreground uppercase font-bold">Description Details</div>
-                       <div className="pl-3 border-l-2 border-azure/40 text-xs italic text-muted-foreground/90 leading-relaxed">
-                          {selectedIncident.description}
-                       </div>
-                    </div>
-                 </div>
+                  </div>
+                </div>
 
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                       <span className="text-[10px] text-muted-foreground uppercase font-bold block">Temporal Marker</span>
-                       <span className="text-xs font-semibold text-foreground/90">{selectedIncident.date}</span>
-                    </div>
-                    <div className="space-y-1">
-                       <span className="text-[10px] text-muted-foreground uppercase font-bold block">Security Sector</span>
-                       <span className="text-xs font-semibold text-foreground/90">District {selectedIncident.district_id}</span>
-                    </div>
-                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-muted-foreground uppercase font-bold block">Temporal Marker</span>
+                    <span className="text-xs font-semibold text-foreground/90">{selectedIncident.date}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-muted-foreground uppercase font-bold block">Security Sector</span>
+                    <span className="text-xs font-semibold text-foreground/90">District {selectedIncident.district_id}</span>
+                  </div>
+                </div>
 
-                 <div className="space-y-1">
-                    <span className="text-[10px] text-muted-foreground uppercase font-bold block">Geographic Identifier</span>
-                    <span className="text-xs font-semibold text-foreground/90 break-words">{selectedIncident.block_address}</span>
-                 </div>
+                <div className="space-y-1">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold block">Geographic Identifier</span>
+                  <span className="text-xs font-semibold text-foreground/90 break-words">{selectedIncident.block_address}</span>
+                </div>
 
-                 <div className="pt-6 border-t border-border space-y-4">
-                    <div className="flex justify-between items-center group">
-                       <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors">Arrest Validated</span>
-                       <span className={`px-2 py-0.5 rounded text-[10px] font-black ${selectedIncident.is_arrest ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-500/20 text-muted-foreground"}`}>
-                          {selectedIncident.is_arrest ? "VERIFIED" : "NONE"}
-                       </span>
-                    </div>
-                    <div className="flex justify-between items-center group">
-                       <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors">Domestic Nexus</span>
-                       <span className={`px-2 py-0.5 rounded text-[10px] font-black ${selectedIncident.is_domestic ? "bg-orange-500/20 text-orange-400" : "bg-neutral-500/20 text-muted-foreground"}`}>
-                          {selectedIncident.is_domestic ? "AFFIRMED" : "UNREL"}
-                       </span>
-                    </div>
-                 </div>
+                <div className="pt-6 border-t border-border space-y-4">
+                  <div className="flex justify-between items-center group">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors">Arrest Validated</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black ${selectedIncident.is_arrest ? "bg-emerald-500/20 text-emerald-400" : "bg-neutral-500/20 text-muted-foreground"}`}>
+                      {selectedIncident.is_arrest ? "VERIFIED" : "NONE"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center group">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors">Domestic Nexus</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black ${selectedIncident.is_domestic ? "bg-orange-500/20 text-orange-400" : "bg-neutral-500/20 text-muted-foreground"}`}>
+                      {selectedIncident.is_domestic ? "AFFIRMED" : "UNREL"}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
