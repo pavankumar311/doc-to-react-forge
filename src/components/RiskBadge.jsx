@@ -1,9 +1,9 @@
 export default function RiskBadge({ tier, size = "default" }) {
   const colors = {
-    HIGH: { bg: "#C62828", text: "#FFFFFF" },
-    MED: { bg: "#F57C00", text: "#FFFFFF" },
-    LOW: { bg: "#2E7D32", text: "#FFFFFF" },
-    NONE: { bg: "#546E7A", text: "#FFFFFF" },
+    HIGH: { bg: "#FEE2E2", text: "#DC2626" },
+    MED: { bg: "#FEF3C7", text: "#D97706" },
+    LOW: { bg: "#DCFCE7", text: "#16A34A" },
+    NONE: { bg: "#F3F4F6", text: "#6B7280" },
   };
   const c = colors[tier] || colors.NONE;
   const small = size === "small";

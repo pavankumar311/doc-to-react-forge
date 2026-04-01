@@ -26,7 +26,7 @@ export default function Sidebar() {
   return (
     <nav
       className="fixed left-0 top-14 bottom-0 w-60 flex flex-col py-4 overflow-y-auto z-50"
-      style={{ background: "var(--color-bg-sidebar)", borderRight: "1px solid var(--color-border)" }}
+      style={{ background: "var(--color-bg-card)", borderRight: "1px solid var(--color-border)" }}
       aria-label="Main navigation"
     >
       {navItems.map((item, i) => {
@@ -42,8 +42,8 @@ export default function Sidebar() {
             to={item.path}
             className="flex items-center gap-3 mx-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all duration-150"
             style={{
-              color: isActive ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-              background: isActive ? "rgba(21,101,192,0.15)" : "transparent",
+              color: isActive ? "var(--color-cobalt)" : "var(--color-text-secondary)",
+              background: isActive ? "rgba(37,99,235,0.08)" : "transparent",
               borderLeft: isActive ? "3px solid var(--color-cobalt)" : "3px solid transparent",
             }}
           >
