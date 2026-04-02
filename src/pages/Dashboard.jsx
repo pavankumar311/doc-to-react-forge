@@ -37,7 +37,7 @@ export default function Dashboard() {
     try {
       const [blocks, trend, alertList] = await Promise.all([
         fetchTopRiskBlocks({ filters, limit: 5, districtIdByName, crimeTypeIdByName }),
-        fetchWeeklyTrend(),
+        fetchWeeklyTrend({ filters, districtIdByName }),
         fetchAlerts(),
       ]);
       setTopRiskBlocks(blocks);
@@ -148,7 +148,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <GscipCard title="7-Day Crime Trend">
+        <GscipCard title="Period-End Trend (7d)">
           <ResponsiveContainer width="100%" height={120}>
             <LineChart data={weeklyTrend}>
               <Tooltip

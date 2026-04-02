@@ -210,8 +210,27 @@ export async function fetchCrimeTypes({ filters, districtIdByName } = {}) {
   }
 }
 
-export async function fetchWeeklyTrend(filters = {}) {
-  return Promise.resolve(weeklyTrend);
+export async function fetchWeeklyTrend({ filters, districtIdByName } = {}) {
+  try {
+    const url = buildRollingTrendUrl({ filters, districtIdByName });
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${AUTH_TOKEN}`,
+      },
+    });
+    if (!res.ok) throw new Error(`Weekly trend fetch failed: ${res.status}`);
+    const payload = await res.json();
+    const chart = payload?.chart_data ?? [];
+    
+    // Map backend series to { day, count } expected by the Dashboard widget
+    return chart.slice(-7).map((row) => ({
+      day: row?.label ?? row?.date?.slice?.(0, 10) ?? "",
+      count: Number(row?.crime_count ?? row?.crimeCount ?? 0),
+    }));
+  } catch (err) {
+    console.error("fetchWeeklyTrend failed:", err);
+    return [];
+  }
 }
 
 // ── Trends ─────────────────────────────────────────────────────────────
