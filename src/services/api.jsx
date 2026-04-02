@@ -37,7 +37,7 @@ import {
 const DASHBOARD_API_BASE = "http://localhost:9002/api/v1/dashboard";
 const REPORTS_API_BASE = "http://localhost:9002/api/v1/reports";
 export const AUTH_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NTAyNDExMywgImV4cCI6IDE3NzUxMTA1MTN9.6gi6yo_r_YfG_cNy4OdB91Bj3aafFL7PkeTPZN_8j8U";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NTExNzU4NCwgImV4cCI6IDE3NzUyMDM5ODR9.KJbTp-nPCPKqdwPeQvynYfoiDCJjMwvYA509ZJ02aDY";
 
 function normalizeDistrictId(value) {
   if (value == null) return "";

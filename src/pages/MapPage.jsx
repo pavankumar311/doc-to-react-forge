@@ -1,7 +1,7 @@
 /** GSCIP Map Page v1.5 */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { format, parse } from "date-fns";
-import { Layers, Download, Calendar as CalendarIcon, Filter, ChevronDown } from "lucide-react";
+import { Layers, Download, Calendar as CalendarIcon, Filter, ChevronDown, Check, Maximize2, Minimize2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -90,15 +90,83 @@ function getPrecinctCentroid(precinct) {
 const buildBins = (values, count) => {
   if (!values.length) return [];
   const sorted = [...values].sort((a, b) => a - b);
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+
+  // Handle all values being the same (e.g., all zeros)
+  if (min === max) {
+    if (max === 0) return []; // Hide legend if all are zero
+    return [{ min: 0, max: max }]; // Single bin if all identical non-zero
+  }
+
   const lastIdx = sorted.length - 1;
   const bins = [];
   for (let i = 0; i < count; i += 1) {
     const minIdx = Math.floor((i / count) * lastIdx);
     const maxIdx = Math.floor(((i + 1) / count) * lastIdx);
-    bins.push({ min: sorted[minIdx] || 0, max: sorted[maxIdx] || 100 });
+    bins.push({ 
+      min: sorted[minIdx] || 0, 
+      max: sorted[maxIdx] || (sorted[minIdx] + 1) 
+    });
   }
   return bins;
 };
+
+/* ── Inline Component: MultiSelect for Crime Types ──────────────────── */
+function CrimeTypeMultiSelect({ options, selectedIds, onToggle, onClearAll }) {
+  const selectedCount = selectedIds?.size || 0;
+  const display = selectedCount === 0
+    ? "All Crimes Types"
+    : selectedCount === 1
+      ? options.find(o => selectedIds.has(o.crime_type_id))?.primary_type
+      : `${selectedCount} Types Selection`;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="flex items-center justify-between w-full h-8 px-3 rounded bg-background border border-border text-[11px] font-bold text-foreground transition-all shadow-sm hover:bg-accent/40">
+          <span className="truncate mr-2">{display}</span>
+          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-0 bg-white border border-border shadow-xl z-[2000]" align="start">
+        <div className="p-3 border-b border-border flex items-center justify-between bg-muted/20">
+          <span className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground">Crime Classification</span>
+          {selectedCount > 0 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onClearAll();
+              }}
+              className="px-2 py-1 rounded bg-primary text-[9px] font-black uppercase tracking-widest text-primary-foreground hover:bg-primary/90 transition-all shadow-md"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+        <div className="max-h-72 overflow-y-auto p-1.5 space-y-0.5">
+          {options?.map((type) => {
+            const active = selectedIds.has(type.crime_type_id);
+            return (
+              <div
+                key={type.crime_type_id}
+                onClick={() => onToggle(type.crime_type_id)}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-200 group hover:bg-accent/40"
+              >
+                <div className={`flex-shrink-0 w-4 h-4 rounded-sm border flex items-center justify-center transition-all duration-300 ${active ? 'bg-primary border-primary shadow-sm' : 'border-input group-hover:border-primary/50'}`}>
+                  {active && <Check className="h-2.5 w-2.5 text-primary-foreground stroke-[4]" />}
+                </div>
+                <span className={`text-[10px] font-bold tracking-wide transition-colors ${active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`}>
+                  {type.primary_type}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function MapPage() {
   const { filters: globalFilters } = useFilters();
@@ -107,6 +175,10 @@ export default function MapPage() {
   const [blocks, setBlocks] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [filterOptions, setFilterOptions] = useState(null);
+
+  // Map Container Ref for Fullscreen
+  const mapContainerRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Local Filter States
   const [localDateFrom, setLocalDateFrom] = useState(globalFilters.dateFrom);
@@ -156,6 +228,22 @@ export default function MapPage() {
 
 
   // Initial load
+  useEffect(() => {
+    const handleFsChange = () => setIsFullscreen(document.fullscreenElement === mapContainerRef.current);
+    document.addEventListener("fullscreenchange", handleFsChange);
+    return () => document.removeEventListener("fullscreenchange", handleFsChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      mapContainerRef.current?.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
   useEffect(() => {
     const loadBootstrap = async () => {
       setLoading(true);
@@ -217,8 +305,10 @@ export default function MapPage() {
 
   // Map Data Loading
   useEffect(() => {
+    const controller = new AbortController();
     const loadMapData = async () => {
-      if (!localDateFrom || !localDateTo) return;
+      // Wait for bootstrap (filters/districts) to be ready
+      if (!localDateFrom || !localDateTo || districts.length === 0) return;
       setLoadingMap(true);
       setError("");
       try {
@@ -233,16 +323,19 @@ export default function MapPage() {
         if (showArrests) commonParams.set("is_arrest", "true");
         if (showDomestic) commonParams.set("is_domestic", "true");
 
+        const headers = { Authorization: `Bearer ${AUTH_TOKEN}` };
+        const signal = controller.signal;
+
         const riskUrl = `${BASE_URL}/api/v1/dashboard/district-risk?${commonParams.toString()}`;
         const beatRiskUrl = `${BASE_URL}/api/v1/dashboard/map/beat-risk?${commonParams.toString()}`;
         const blocksUrl = `${BASE_URL}/api/v1/dashboard/map/blocks?${commonParams.toString()}&limit=5000`;
         const incidentsUrl = `${BASE_URL}/api/v1/dashboard/map/incidents?${commonParams.toString()}&limit=1000`;
 
         const [riskRes, beatRiskRes, blocksRes, incidentsRes] = await Promise.all([
-          fetch(riskUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
-          fetch(beatRiskUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
-          fetch(blocksUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
-          fetch(incidentsUrl, { headers: { Authorization: `Bearer ${AUTH_TOKEN}` } }),
+          fetch(riskUrl, { headers, signal }),
+          fetch(beatRiskUrl, { headers, signal }),
+          fetch(blocksUrl, { headers, signal }),
+          fetch(incidentsUrl, { headers, signal }),
         ]);
 
         const riskJson = await riskRes.json();
@@ -255,6 +348,7 @@ export default function MapPage() {
         setBlocks(blocksJson?.blocks || []);
         setIncidents(incidentsJson || []);
       } catch (err) {
+        if (err.name === 'AbortError') return;
         console.error(err);
         setError("Failed to sync map forensics");
       } finally {
@@ -263,6 +357,7 @@ export default function MapPage() {
     };
 
     loadMapData();
+    return () => controller.abort();
   }, [localDateFrom, localDateTo, localCrimeTypeIds, showArrests, showDomestic]);
 
   const toggleCrimeType = (id) => {
@@ -272,6 +367,13 @@ export default function MapPage() {
       else next.add(id);
       return next;
     });
+  };
+
+  const clearCrimeTypes = () => {
+    setLocalCrimeTypeIds(new Set());
+    setRiskData([]);
+    setIncidents([]);
+    setBlocks([]);
   };
 
   const onZoomChange = useCallback((zoom) => setMapZoom(zoom), []);
@@ -387,43 +489,51 @@ export default function MapPage() {
             </select>
           </div>
 
+          <div className="space-y-1.5 min-w-[200px]">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Crimes Types</label>
+            <CrimeTypeMultiSelect
+              options={filterOptions?.crime_types}
+              selectedIds={localCrimeTypeIds}
+              onToggle={toggleCrimeType}
+              onClearAll={clearCrimeTypes}
+            />
+          </div>
+
           <div className="flex flex-col gap-2 border-l border-border pl-6 ml-2">
             <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Quick Filters</label>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-6">
               <label className="flex items-center gap-2 cursor-pointer group">
-                <input type="checkbox" checked={showArrests} onChange={e => setShowArrests(e.target.checked)} className="w-4 h-4 rounded border-border" />
-                <span className="text-[11px] font-bold text-muted-foreground group-hover:text-foreground">Arrests Only</span>
+                <input type="checkbox" checked={showArrests} onChange={e => setShowArrests(e.target.checked)} className="w-4 h-4 rounded border-border accent-azure" />
+                <span className="text-[11px] font-bold text-azure group-hover:brightness-125 transition-all">Arrests Only</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer group">
-                <input type="checkbox" checked={showDomestic} onChange={e => setShowDomestic(e.target.checked)} className="w-4 h-4 rounded border-border" />
-                <span className="text-[11px] font-bold text-muted-foreground group-hover:text-foreground">Domestic Incidents</span>
+              <label className="flex items-center gap-2 cursor-pointer group border-l border-border pl-6">
+                <input type="checkbox" checked={showDomestic} onChange={e => setShowDomestic(e.target.checked)} className="w-4 h-4 rounded border-border accent-azure" />
+                <span className="text-[11px] font-bold text-azure group-hover:brightness-125 transition-all">Domestic Incidents</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer group border-l border-border pl-4">
-                <input type="checkbox" checked={showPoliticalWards} onChange={e => setShowPoliticalWards(e.target.checked)} className="w-4 h-4 rounded border-border" />
-                <span className="text-[11px] font-bold text-azure group-hover:brightness-125">Show Political Wards</span>
+              <label className="flex items-center gap-2 cursor-pointer group border-l border-border pl-6">
+                <input type="checkbox" checked={showPoliticalWards} onChange={e => setShowPoliticalWards(e.target.checked)} className="w-4 h-4 rounded border-border accent-azure" />
+                <span className="text-[11px] font-bold text-azure group-hover:brightness-125 transition-all">Show Political Wards</span>
               </label>
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {filterOptions?.crime_types?.map(type => {
-            const active = localCrimeTypeIds.has(type.crime_type_id);
-            return (
-              <button
-                key={type.crime_type_id}
-                onClick={() => toggleCrimeType(type.crime_type_id)}
-                className={`px-3 py-1 rounded-full text-[10px] font-bold border transition-all ${active ? "bg-azure/20 border-azure text-azure shadow-lg shadow-azure/10 scale-105" : "border-border text-muted-foreground hover:border-gray-500"}`}
-              >
-                {type.primary_type}
-              </button>
-            );
-          })}
-        </div>
+        {/* Removed individual chips and integrated into dropdown above */}
       </div>
 
-      <div className="flex gap-5" style={{ height: "calc(100vh - 360px)" }}>
-        <div className="flex-1 relative rounded-2xl overflow-hidden border border-border shadow-2xl bg-black">
+      <div className="flex gap-5" style={{ height: isFullscreen ? "100vh" : "calc(100vh - 360px)" }}>
+        <div ref={mapContainerRef} className="flex-1 relative rounded-2xl overflow-hidden border border-border shadow-2xl bg-black">
+          {/* Fullscreen Toggle Button */}
+          <button
+            onClick={toggleFullscreen}
+            className="absolute top-6 right-6 z-[2000] w-10 h-10 rounded-xl bg-black/60 border border-white/20 text-white hover:bg-black/80 hover:scale-110 transition-all backdrop-blur-md flex items-center justify-center shadow-2xl group"
+            title={isFullscreen ? "Exit Fullscreen" : "Fullscreen View"}
+          >
+            {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+            <span className="absolute right-full mr-3 px-2 py-1 rounded bg-black/80 text-[9px] font-black uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-white/10 whitespace-nowrap">
+              {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+            </span>
+          </button>
           <ThematicMap
             districts={districts}
             riskData={riskData}
@@ -450,11 +560,6 @@ export default function MapPage() {
 
           <ThematicLegend title="Incidents per 1k" bins={bins} colors={THEMATIC_COLORS} />
 
-          {loadingMap && (
-            <div className="absolute top-6 left-6 rounded-lg px-4 py-2 text-[10px] font-black uppercase tracking-widest bg-black/80 border border-azure text-azure backdrop-blur-xl animate-pulse z-[1000]">
-              Syncing Forensics...
-            </div>
-          )}
         </div>
 
         {/* Dynamic Side Panel */}
@@ -546,7 +651,7 @@ export default function MapPage() {
                           </div>
                           <div className="flex justify-between items-center px-2 pt-2 border-t border-white/5">
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tactical Intensity</span>
-                            <span className="text-sm font-black text-white">{Number(dRisk.crimes_per_1000).toFixed(1)}<span className="text-[9px] ml-1 opacity-50">/1K</span></span>
+                            <span className="text-sm font-black text-[#facc15]">{Number(dRisk.crimes_per_1000).toFixed(1)}<span className="text-[9px] ml-1 opacity-50">/1K</span></span>
                           </div>
                         </div>
                       )}
@@ -569,24 +674,24 @@ export default function MapPage() {
 
                           <div className="pt-5 border-t border-white/10 flex flex-col gap-4">
                             <div className="flex items-center justify-between">
-                               <span className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Vector Distance</span>
-                               <span className="text-sm font-black text-white tracking-tight">
-                                 <span className="text-azure">{nearest.distance.toFixed(2)}</span> MILES
-                               </span>
+                              <span className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Vector Distance</span>
+                              <span className="text-sm font-black text-white tracking-tight">
+                                <span className="text-azure">{nearest.distance.toFixed(2)}</span> MILES
+                              </span>
                             </div>
                             {nearest.phone && (
                               <div className="pt-4 border-t border-white/5 border-dashed">
-                                 <a 
-                                  href={`tel:${nearest.phone}`} 
+                                <a
+                                  href={`tel:${nearest.phone}`}
                                   className="w-full h-11 flex items-center justify-center gap-3 rounded-xl bg-azure/10 border border-azure/40 hover:bg-azure/20 hover:border-azure transition-all group overflow-hidden relative shadow-lg shadow-azure/10"
-                                 >
-                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full duration-700 transition-transform"></div>
-                                    <span className="text-lg">📞</span>
-                                    <div className="flex flex-col items-start leading-tight">
-                                       <span className="text-[11px] font-black uppercase tracking-widest text-azure">Engage Tactical Unit</span>
-                                       <span className="text-sm font-black text-white tabular-nums">{nearest.phone}</span>
-                                    </div>
-                                 </a>
+                                >
+                                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full duration-700 transition-transform"></div>
+                                  <span className="text-lg">📞</span>
+                                  <div className="flex flex-col items-start leading-tight">
+                                    <span className="text-[11px] font-black uppercase tracking-widest text-azure">Engage Tactical Unit</span>
+                                    <span className="text-sm font-black text-white tabular-nums">{nearest.phone}</span>
+                                  </div>
+                                </a>
                               </div>
                             )}
                           </div>
@@ -618,9 +723,9 @@ export default function MapPage() {
                       <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 group-hover:text-slate-400">Incident Count</div>
                       <div className="text-2xl font-black text-white">{selectedDistrictRisk?.crime_count || 0}</div>
                     </div>
-                    <div className="p-5 rounded-2xl bg-slate-900/50 border border-white/5 shadow-xl transition-all hover:border-azure/30 group">
-                      <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 group-hover:text-azure">Density/1k</div>
-                      <div className="text-2xl font-black text-azure">{Number(selectedDistrictRisk?.crimes_per_1000 || 0).toFixed(1)}</div>
+                    <div className="p-5 rounded-2xl bg-slate-900/50 border border-white/5 shadow-xl transition-all hover:border-yellow-400/30 group">
+                      <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 group-hover:text-yellow-400">Density/1k</div>
+                      <div className="text-2xl font-black text-yellow-400">{Number(selectedDistrictRisk?.crimes_per_1000 || 0).toFixed(1)}</div>
                     </div>
                   </div>
 

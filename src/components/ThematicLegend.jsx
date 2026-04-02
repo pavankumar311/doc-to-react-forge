@@ -28,7 +28,7 @@ export default function ThematicLegend({ title = "Density Analysis", bins = [], 
       }}
     >
       <div className="flex items-center gap-2.5 mb-4">
-        <div className="w-1.5 h-3.5 rounded-full bg-azure shadow-[0_0_10px_rgba(0,123,255,0.5)]"></div>
+        <div className="w-1.5 h-3.5 rounded-full bg-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.5)]"></div>
         <p className="text-[10px] font-black uppercase tracking-widest text-white">
           {title}
         </p>
