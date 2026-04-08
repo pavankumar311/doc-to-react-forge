@@ -184,6 +184,8 @@ export default function Dashboard() {
           </div>
         </GscipCard>
       </div>
+      </>
+      )}
     </div>
   );
 }
