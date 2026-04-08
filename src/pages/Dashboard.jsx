@@ -69,9 +69,6 @@ export default function Dashboard() {
         </button>
       </div>
 
-      <SummaryTabs activeTab={activeTab} onTabChange={setActiveTab} />
-      <SummarySection />
-
       {isLoading ? <DashboardSkeleton /> : (
       <>
       {/* KPI Cards */}

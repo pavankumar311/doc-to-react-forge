@@ -1,5 +1,3 @@
-import { useState } from "react";
-
 const TABS = ["Police Districts", "Police Beats", "Wards", "Community Areas"];
 
 export default function SummaryTabs({ activeTab, onTabChange }) {

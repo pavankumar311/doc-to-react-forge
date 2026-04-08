@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 
 const navItems = [
+  { label: "Summary Maps", icon: LayoutDashboard, path: "/Summarymaps", minRole: "Viewer" },
   { label: "Dashboard", icon: LayoutDashboard, path: "/", minRole: "Viewer" },
   //{ label: "Risk Heatmap", icon: MapPin, path: "/heatmap", minRole: "Viewer" },
   { label: "Thematic Map", icon: Map, path: "/map", minRole: "Viewer" },

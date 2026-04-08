@@ -14,6 +14,7 @@ import ModelsPage from "./pages/ModelsPage";
 import FairnessPage from "./pages/FairnessPage";
 import ReportsPage from "./pages/ReportsPage";
 import ChatPage from "./pages/ChatPage";
+import SummaryMapsPage from "./pages/SummaryMapsPage";
 import BlockDetailPage from "./pages/BlockDetailPage";
 import SettingsPage from "./pages/SettingsPage";
 import AuditPage from "./pages/AuditPage";
@@ -49,6 +50,7 @@ function AppRoutes() {
             <main className="p-6">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/Summarymaps" element={<SummaryMapsPage />} />
                 <Route path="/heatmap" element={<HeatmapPage />} />
                 <Route path="/map" element={<MapPage />} />
                 <Route path="/network" element={<NetworkPage />} />
