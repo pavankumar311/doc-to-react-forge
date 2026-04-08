@@ -70,6 +70,7 @@ export default function Dashboard() {
       </div>
 
       <SummaryTabs activeTab={activeTab} onTabChange={setActiveTab} />
+      <SummarySection />
 
       {isLoading ? <DashboardSkeleton /> : (
       <>
