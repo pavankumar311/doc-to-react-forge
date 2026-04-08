@@ -60,7 +60,7 @@ export default function Dashboard() {
 
   return (
     <div>
-      <SummaryTabs activeTab={activeTab} onTabChange={setActiveTab} />
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>Dashboard Overview</h1>
           <p className="text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>Last updated: 2h ago</p>
