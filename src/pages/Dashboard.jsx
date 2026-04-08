@@ -4,6 +4,7 @@ import { LineChart, Line, ResponsiveContainer, Tooltip } from "recharts";
 import { Link } from "react-router-dom";
 import GscipCard from "../components/GscipCard";
 import RiskBadge from "../components/RiskBadge";
+import SummaryTabs from "../components/SummaryTabs";
 import { DashboardSkeleton } from "../components/Skeletons";
 import { useFilters } from "../contexts/FilterContext";
 import { fetchTopRiskBlocks, fetchWeeklyTrend, fetchAlerts } from "../services/api";
