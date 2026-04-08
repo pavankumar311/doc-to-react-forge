@@ -32,6 +32,7 @@ export default function Dashboard() {
   const [weeklyTrend, setWeeklyTrend] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("Police Districts");
 
   const loadData = useCallback(async () => {
     setLoading(true);
