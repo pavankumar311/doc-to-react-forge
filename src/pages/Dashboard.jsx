@@ -68,6 +68,10 @@ export default function Dashboard() {
         </button>
       </div>
 
+      <SummaryTabs activeTab={activeTab} onTabChange={setActiveTab} />
+
+      {isLoading ? <DashboardSkeleton /> : (
+      <>
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <KpiCard
