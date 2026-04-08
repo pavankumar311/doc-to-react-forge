@@ -54,9 +54,7 @@ export default function Dashboard() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  if (loading || summaryLoading || !summaryData) {
-    return <DashboardSkeleton />;
-  }
+  const isLoading = loading || summaryLoading || !summaryData;
 
   return (
     <div>
@@ -70,6 +68,10 @@ export default function Dashboard() {
         </button>
       </div>
 
+      <SummaryTabs activeTab={activeTab} onTabChange={setActiveTab} />
+
+      {isLoading ? <DashboardSkeleton /> : (
+      <>
       {/* KPI Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <KpiCard
@@ -182,6 +184,8 @@ export default function Dashboard() {
           </div>
         </GscipCard>
       </div>
+      </>
+      )}
     </div>
   );
 }
