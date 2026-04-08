@@ -54,9 +54,7 @@ export default function Dashboard() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  if (loading || summaryLoading || !summaryData) {
-    return <DashboardSkeleton />;
-  }
+  const isLoading = loading || summaryLoading || !summaryData;
 
   return (
     <div>
