@@ -365,6 +365,8 @@ function MapPanel({ totalIncidents }) {
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
+
+  useEffect(() => {
     const fetchDistricts = async () => {
       try {
         const res = await fetch("/chicago_districts.geojson");
