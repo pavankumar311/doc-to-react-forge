@@ -288,6 +288,47 @@ function DropShadowPainter() {
   return null;
 }
 
+function MapZoomControls({ onZoomIn, onZoomOut, onReset, isFullscreen, onToggleFullscreen }) {
+  return (
+    <div className="absolute top-4 left-4 z-[500] flex flex-col gap-1.5">
+      <button
+        onClick={onReset}
+        className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500"
+        title="Reset view"
+      >
+        <Home size={18} />
+      </button>
+      <button
+        onClick={onZoomIn}
+        className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500"
+        title="Zoom in"
+      >
+        <ZoomIn size={18} />
+      </button>
+      <button
+        onClick={onZoomOut}
+        className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500"
+        title="Zoom out"
+      >
+        <ZoomOut size={18} />
+      </button>
+      <button
+        onClick={onToggleFullscreen}
+        className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500"
+        title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+      >
+        {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+      </button>
+    </div>
+  );
+}
+
+function MapRefSetter({ mapRefCb }) {
+  const map = useMap();
+  useEffect(() => { mapRefCb(map); }, [map, mapRefCb]);
+  return null;
+}
+
 function MapPanel({ totalIncidents }) {
   const [districts, setDistricts] = useState([]);
 
