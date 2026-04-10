@@ -2,11 +2,12 @@ import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import {
   LayoutDashboard, MapPin, Map, Layers, Network, TrendingUp, FileText,
-  MessageSquare, Activity, Settings, Shield,
+  MessageSquare, Activity, Settings, Shield, AlertTriangle,
 } from "lucide-react";
 
 const navItems = [
   { label: "Summary Maps", icon: Layers, path: "/Summarymaps", minRole: "Viewer" },
+  { label: "Crimes", icon: AlertTriangle, path: "/crimes", minRole: "Viewer" },
   { label: "Dashboard", icon: LayoutDashboard, path: "/", minRole: "Viewer" },
   //{ label: "Risk Heatmap", icon: MapPin, path: "/heatmap", minRole: "Viewer" },
   { label: "Thematic Map", icon: Map, path: "/map", minRole: "Viewer" },

@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { FilterProvider } from "./contexts/FilterContext";
@@ -15,12 +15,16 @@ import FairnessPage from "./pages/FairnessPage";
 import ReportsPage from "./pages/ReportsPage";
 import ChatPage from "./pages/ChatPage";
 import SummaryMapsPage from "./pages/SummaryMapsPage";
+import CrimesPage from "./pages/CrimesPage";
 import BlockDetailPage from "./pages/BlockDetailPage";
 import SettingsPage from "./pages/SettingsPage";
 import AuditPage from "./pages/AuditPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import NotFound from "./pages/NotFound";
+
+// Pages that should NOT show the global FilterBar
+const PAGES_WITHOUT_FILTERBAR = ["/Summarymaps", "/crimes"];
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -37,6 +41,9 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
+  const location = useLocation();
+  const showFilterBar = !PAGES_WITHOUT_FILTERBAR.includes(location.pathname);
+
   return (
     <Routes>
       <Route path="/login" element={<AuthRoute><LoginPage /></AuthRoute>} />
@@ -46,11 +53,12 @@ function AppRoutes() {
           <GlobalHeader />
           <Sidebar />
           <div className="ml-60 pt-14">
-            <FilterBar />
+            {showFilterBar && <FilterBar />}
             <main className="p-6">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/Summarymaps" element={<SummaryMapsPage />} />
+                <Route path="/crimes" element={<CrimesPage />} />
                 <Route path="/heatmap" element={<HeatmapPage />} />
                 <Route path="/map" element={<MapPage />} />
                 <Route path="/network" element={<NetworkPage />} />
