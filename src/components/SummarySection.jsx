@@ -352,6 +352,24 @@ function MapPanel({ totalIncidents }) {
                        direction: "center",
                        className: "bg-transparent border-0 shadow-none text-gray-700 font-semibold text-xs text-shadow-sm",
                      });
+                     layer.bindPopup(
+                       `<div style="font-size:13px;line-height:1.6;padding:2px 4px;">
+                         <b>Police District:</b> ${d.district_id}<br/>
+                         <b>Count of Incidents:</b> ${count.toLocaleString()}
+                       </div>`,
+                       { className: "leaflet-popup-custom" }
+                     );
+                     layer.on({
+                       mouseover: (e) => {
+                         e.target.setStyle({ weight: 3, color: "#333", fillOpacity: 0.85 });
+                       },
+                       mouseout: (e) => {
+                         e.target.setStyle({ weight: 1, color: "#4f504f", fillOpacity: 1 });
+                       },
+                       click: (e) => {
+                         e.target.openPopup();
+                       }
+                     });
                   }}
                 />
             );
