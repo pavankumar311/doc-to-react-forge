@@ -331,8 +331,40 @@ function MapRefSetter({ mapRefCb }) {
 
 function MapPanel({ totalIncidents }) {
   const [districts, setDistricts] = useState([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const mapRef = useRef(null);
+  const containerRef = useRef(null);
+  const DEFAULT_CENTER = [41.83, -87.72];
+  const DEFAULT_ZOOM = 10.5;
+
+  const setMapRef = useCallback((map) => { mapRef.current = map; }, []);
+
+  const handleZoomIn = () => mapRef.current?.zoomIn();
+  const handleZoomOut = () => mapRef.current?.zoomOut();
+  const handleReset = () => {
+    if (mapRef.current) {
+      mapRef.current.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    }
+  };
+
+  const toggleFullscreen = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  };
 
   useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      setTimeout(() => mapRef.current?.invalidateSize(), 200);
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
     const fetchDistricts = async () => {
       try {
         const res = await fetch("/chicago_districts.geojson");
