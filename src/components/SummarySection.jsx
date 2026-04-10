@@ -409,14 +409,15 @@ function MapPanel({ totalIncidents }) {
         </div>
       </div>
 
-      <div className="relative rounded bg-[#eff1f1] border border-gray-200 overflow-hidden" style={{ height: 620 }}>
+      <div ref={containerRef} className={`relative rounded bg-[#eff1f1] border border-gray-200 overflow-hidden ${isFullscreen ? '' : ''}`} style={{ height: isFullscreen ? '100vh' : 620 }}>
         <MapContainer 
-          center={[41.83, -87.72]} 
-          zoom={10.5} 
-          scrollWheelZoom={false} 
+          center={DEFAULT_CENTER} 
+          zoom={DEFAULT_ZOOM} 
+          scrollWheelZoom={true} 
           className="w-full h-full bg-[#eff1f1]"
           zoomControl={false}
         >
+          <MapRefSetter mapRefCb={setMapRef} />
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"
           />
@@ -467,10 +468,13 @@ function MapPanel({ totalIncidents }) {
           })}
         </MapContainer>
 
-        {/* Home Button Overlay */}
-        <div className="absolute top-4 left-4 z-[500] bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500">
-          <Home size={20} />
-        </div>
+        <MapZoomControls
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onReset={handleReset}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={toggleFullscreen}
+        />
 
         {/* KPI Card Overlay */}
         <div className="absolute top-8 right-8 z-[500] bg-[#e8e9eb] px-10 py-6 rounded-xl shadow-lg border border-gray-200 min-w-[240px] text-center">
