@@ -39,6 +39,45 @@ const MOCK_DISTRICTS = [
   { name: "025", count: 890 },
 ];
 
+const MOCK_BEATS = [
+  { name: "0111", count: 312 },
+  { name: "0112", count: 278 },
+  { name: "0231", count: 431 },
+  { name: "0232", count: 395 },
+  { name: "0311", count: 520 },
+  { name: "0412", count: 488 },
+  { name: "0511", count: 370 },
+  { name: "0611", count: 560 },
+  { name: "0712", count: 415 },
+  { name: "0813", count: 339 },
+  { name: "0911", count: 402 },
+  { name: "1011", count: 295 },
+  { name: "1112", count: 511 },
+  { name: "1213", count: 348 },
+];
+
+const MOCK_WARDS = [
+  { name: "Ward 1", count: 620 },
+  { name: "Ward 2", count: 710 },
+  { name: "Ward 3", count: 540 },
+  { name: "Ward 4", count: 890 },
+  { name: "Ward 5", count: 960 },
+  { name: "Ward 6", count: 1020 },
+  { name: "Ward 7", count: 830 },
+  { name: "Ward 8", count: 750 },
+  { name: "Ward 9", count: 680 },
+  { name: "Ward 10", count: 590 },
+  { name: "Ward 11", count: 870 },
+  { name: "Ward 12", count: 490 },
+];
+
+const TAB_DATA = {
+  "Police Districts": { data: MOCK_DISTRICTS, chartTitle: "Incidents by District", filterLabel: "District" },
+  "Police Beats":    { data: MOCK_BEATS,     chartTitle: "Incidents by Beats",    filterLabel: "Beat" },
+  "Wards":           { data: MOCK_WARDS,     chartTitle: "Incidents by Wards",    filterLabel: "Ward" },
+  "Community Areas": { data: MOCK_DISTRICTS, chartTitle: "Incidents by District", filterLabel: "Community Area" },
+};
+
 const MOCK_DATE_DATA = [
   { date: "2025-04-01", count: 390 },
   { date: "2025-04-08", count: 420 },
@@ -167,12 +206,12 @@ function CrimeTypeChart({ data }) {
   );
 }
 
-function DistrictChart({ data }) {
+function DistrictChart({ data, title }) {
   return (
     <GscipCard>
       <div className="flex items-center gap-2 mb-4">
         <MapPin size={18} style={{ color: "var(--color-text-secondary)" }} />
-        <h3 className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>Incidents by District</h3>
+        <h3 className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>{title}</h3>
       </div>
       <ResponsiveContainer width="100%" height={280}>
         <BarChart data={data} layout="vertical" margin={{ left: 10, right: 50, top: 5, bottom: 5 }}>
@@ -198,14 +237,14 @@ function DistrictChart({ data }) {
   );
 }
 
-function DistrictFilterPanel({ districts, selectedDistricts, onToggleDistrict, onApply, onReset }) {
+function DistrictFilterPanel({ districts, selectedDistricts, onToggleDistrict, onApply, onReset, filterLabel, compact }) {
   return (
-    <GscipCard>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>District</h3>
+    <GscipCard style={compact ? { paddingTop: 12, paddingBottom: 12 } : {}}>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>{filterLabel || "District"}</h3>
         <button onClick={onReset} className="text-xs font-medium" style={{ color: "var(--color-azure)" }}>Reset</button>
       </div>
-      <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
+      <div className={`space-y-2 overflow-y-auto pr-2 ${compact ? "max-h-36" : "max-h-80"}`}>
         {districts.map((district) => (
           <label key={district.name} className="flex items-center justify-between cursor-pointer group">
             <div className="flex items-center gap-2">
@@ -224,26 +263,28 @@ function DistrictFilterPanel({ districts, selectedDistricts, onToggleDistrict, o
       </div>
       <button
         onClick={onApply}
-        className="w-full py-2 rounded-md text-sm font-medium text-white mt-4"
+        className="w-full py-1.5 rounded-md text-sm font-medium text-white mt-3"
         style={{ background: "var(--color-cobalt)" }}
       >
         Apply
       </button>
-      <p className="text-[11px] mt-3" style={{ color: "var(--color-text-muted)" }}>
-        Counts do not update with filtering; are for past 365 days.
-      </p>
+      {/* {!compact && (
+        <p className="text-[11px] mt-3" style={{ color: "var(--color-text-muted)" }}>
+          Counts do not update with filtering; are for past 365 days.
+        </p>
+      )} */}
     </GscipCard>
   );
 }
 
-function IncidentsByDateChart({ data }) {
+function IncidentsByDateChart({ data, chartHeight = 360 }) {
   return (
-    <GscipCard>
+    <GscipCard style={{ height: "100%" }}>
       <div className="flex items-center gap-2 mb-4">
         <span className="text-lg">📅</span>
         <h3 className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>Incidents by Date</h3>
       </div>
-      <ResponsiveContainer width="100%" height={360}>
+      <ResponsiveContainer width="100%" height={chartHeight}>
         <LineChart data={data} margin={{ left: 0, right: 20, top: 10, bottom: 10 }}>
           <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
           <XAxis dataKey="date" tick={{ fontSize: 11, fill: "var(--color-text-muted)" }} tickLine={false} axisLine={false} />
@@ -507,7 +548,7 @@ function MapPanel({ totalIncidents }) {
   );
 }
 
-export default function SummarySection() {
+export default function SummarySection({ activeTab = "Police Districts" }) {
   const [timeFrame, setTimeFrame] = useState("Last 365 days");
   const [selectedCrimes, setSelectedCrimes] = useState([]);
   const [selectedDistricts, setSelectedDistricts] = useState([]);
@@ -529,7 +570,19 @@ export default function SummarySection() {
   const applyCrimes = () => {};
   const applyDistricts = () => {};
 
+  // Beat-specific filter state (only used when Police Beats tab is active)
+  const [selectedBeats, setSelectedBeats] = useState([]);
+  const toggleBeat = (name) =>
+    setSelectedBeats((prev) =>
+      prev.includes(name) ? prev.filter((b) => b !== name) : [...prev, name]
+    );
+  const resetBeats = () => setSelectedBeats([]);
+
   const totalIncidents = MOCK_CRIME_TYPES.reduce((sum, c) => sum + c.count, 0);
+
+  // Pick data and labels based on the active tab
+  const tabConfig = TAB_DATA[activeTab] || TAB_DATA["Police Districts"];
+  const isBeatsTab = activeTab === "Police Beats";
 
   return (
     <>
@@ -549,23 +602,57 @@ export default function SummarySection() {
           <CrimeTypeChart data={MOCK_CRIME_TYPES} />
         </div>
         <div className="col-span-6">
-          <DistrictChart data={MOCK_DISTRICTS} />
+          <DistrictChart data={tabConfig.data} title={tabConfig.chartTitle} />
         </div>
       </div>
 
+      {/* Second row: Police Beats stacks District + Beat panels vertically in col-3; others use col-3 + col-9 */}
       <div className="grid grid-cols-12 gap-4 mb-6">
-        <div className="col-span-3">
-          <DistrictFilterPanel
-            districts={MOCK_DISTRICTS}
-            selectedDistricts={selectedDistricts}
-            onToggleDistrict={toggleDistrict}
-            onApply={applyDistricts}
-            onReset={resetDistricts}
-          />
-        </div>
-        <div className="col-span-9">
-          <IncidentsByDateChart data={MOCK_DATE_DATA} />
-        </div>
+        {isBeatsTab ? (
+          <>
+            {/* District stacked on top of Beat — both in a single col-span-3 */}
+            <div className="col-span-3 flex flex-col gap-4">
+              <DistrictFilterPanel
+                districts={MOCK_DISTRICTS}
+                selectedDistricts={selectedDistricts}
+                onToggleDistrict={toggleDistrict}
+                onApply={applyDistricts}
+                onReset={resetDistricts}
+                filterLabel="District"
+                compact
+              />
+              <DistrictFilterPanel
+                districts={MOCK_BEATS}
+                selectedDistricts={selectedBeats}
+                onToggleDistrict={toggleBeat}
+                onApply={() => {}}
+                onReset={resetBeats}
+                filterLabel="Beat"
+                compact
+              />
+            </div>
+            {/* Date chart takes full remaining 9 cols — taller to match stacked panels */}
+            <div className="col-span-9">
+              <IncidentsByDateChart data={MOCK_DATE_DATA} chartHeight={500} />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="col-span-3">
+              <DistrictFilterPanel
+                districts={tabConfig.data}
+                selectedDistricts={selectedDistricts}
+                onToggleDistrict={toggleDistrict}
+                onApply={applyDistricts}
+                onReset={resetDistricts}
+                filterLabel={tabConfig.filterLabel}
+              />
+            </div>
+            <div className="col-span-9">
+              <IncidentsByDateChart data={MOCK_DATE_DATA} />
+            </div>
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-12 gap-4 mb-6">
