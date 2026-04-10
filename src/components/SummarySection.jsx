@@ -285,13 +285,19 @@ function MapPanel({ totalIncidents }) {
         const res = await fetch("/chicago_districts.geojson");
         const data = await res.json();
         if (data && data.features) {
-          const mappedDistricts = data.features.map(f => {
+          // Deduplicate by dist_num (keep first occurrence)
+          const seen = new Set();
+          const mappedDistricts = [];
+          for (const f of data.features) {
             const rawId = f.properties.dist_num || f.properties.district || f.properties.DIST_NUM || f.properties.DISTRICT;
-            return {
-              district_id: rawId ? String(rawId).padStart(3, '0') : "000",
-              boundary: f.geometry
-            };
-          });
+            const id = rawId ? String(rawId).padStart(3, '0') : "000";
+            if (seen.has(id)) continue;
+            seen.add(id);
+            mappedDistricts.push({
+              district_id: id,
+              boundary: { type: "Feature", geometry: f.geometry, properties: {} }
+            });
+          }
           setDistricts(mappedDistricts);
         }
       } catch (e) {
