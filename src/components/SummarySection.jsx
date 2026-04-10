@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
-import { Filter, MapPin } from "lucide-react";
+import { Filter, MapPin, Home, Copy, SquareStack } from "lucide-react";
 import GscipCard from "./GscipCard";
+import { MapContainer, TileLayer, GeoJSON, useMap } from "react-leaflet";
+import L from "leaflet";
+import { AUTH_TOKEN } from "../services/api";
 
 const MOCK_CRIME_TYPES = [
   { name: "Aggravated Battery", count: 7031 },
@@ -241,26 +244,150 @@ function IncidentsByDateChart({ data }) {
   );
 }
 
+// Thematic Legend colors from the image
+const BINS = [
+  { min: 1284, max: Infinity, label: "> 1,284 - 1,537", color: "#2d4464" }, // dark blue
+  { min: 1049, max: 1284, label: "> 1,049 - 1,284", color: "#547e9b" }, // darker teal
+  { min: 807, max: 1049, label: "> 807 - 1,049", color: "#77a9be" }, // medium teal
+  { min: 587, max: 807, label: "> 587 - 807", color: "#b9d4c6" }, // light teal
+  { min: 0, max: 587, label: "307 - 587", color: "#faf1d2" }, // pale yellow
+];
+
+function getCentroid(boundary) {
+  if (!boundary) return [41.84, -87.63];
+  try {
+    const coords = boundary.type === "Polygon" ? boundary.coordinates[0] : boundary.coordinates[0][0];
+    const lats = coords.map(c => c[1]);
+    const lons = coords.map(c => c[0]);
+    return [lats.reduce((a, b) => a + b, 0) / lats.length, lons.reduce((a, b) => a + b, 0) / lons.length];
+  } catch (e) {
+    return [41.84, -87.63];
+  }
+}
+
+function DropShadowPainter() {
+  const map = useMap();
+  useEffect(() => {
+    const pane = map.getPane("overlayPane");
+    if (pane) {
+      pane.style.filter = "drop-shadow(6px 10px 8px rgba(0,0,0,0.5))";
+    }
+  }, [map]);
+  return null;
+}
+
 function MapPanel({ totalIncidents }) {
+  const [districts, setDistricts] = useState([]);
+
+  useEffect(() => {
+    const fetchDistricts = async () => {
+      try {
+        const res = await fetch("/chicago_districts.geojson");
+        const data = await res.json();
+        if (data && data.features) {
+          const mappedDistricts = data.features.map(f => {
+            const rawId = f.properties.dist_num || f.properties.district || f.properties.DIST_NUM || f.properties.DISTRICT;
+            return {
+              district_id: rawId ? String(rawId).padStart(3, '0') : "000",
+              boundary: f.geometry
+            };
+          });
+          setDistricts(mappedDistricts);
+        }
+      } catch (e) {
+        console.error("Failed to load local districts GeoJSON", e);
+      }
+    };
+    fetchDistricts();
+  }, []);
+
+  const countsMap = useMemo(() => {
+    const map = new Map();
+    MOCK_DISTRICTS.forEach(d => map.set(d.name, d.count));
+    return map;
+  }, []);
+
   return (
-    <GscipCard>
-      <div className="flex items-center gap-2 mb-4">
-        <MapPin size={18} style={{ color: "var(--color-text-secondary)" }} />
-        <h3 className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>Map of Incidents</h3>
+    <GscipCard className="relative bg-[#e8e9ea]">
+      {/* Header spanning above Map */}
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-xl text-gray-500 tracking-wide font-medium">Map of Incidents</h3>
+        <div className="flex items-center gap-3 text-gray-400">
+          <Copy size={16} className="cursor-pointer hover:text-gray-600" />
+          <SquareStack size={16} className="cursor-pointer hover:text-gray-600" />
+        </div>
       </div>
-      <div className="relative rounded-lg overflow-hidden" style={{ height: 560, background: "var(--color-bg-surface)" }}>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="text-center">
-            <p className="font-mono text-3xl font-bold" style={{ color: "var(--color-cobalt)" }}>
-              {totalIncidents.toLocaleString()}
-            </p>
-            <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>Reported Incidents</p>
+
+      <div className="relative rounded bg-[#eff1f1] border border-gray-200 overflow-hidden" style={{ height: 620 }}>
+        <MapContainer 
+          center={[41.83, -87.72]} 
+          zoom={10.5} 
+          scrollWheelZoom={false} 
+          className="w-full h-full bg-[#eff1f1]"
+          zoomControl={false}
+        >
+          <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"
+          />
+          <DropShadowPainter />
+          
+          {districts.filter(d => d.boundary).map(d => {
+            const count = countsMap.get(d.district_id) || 450; 
+            const bin = BINS.find(b => count >= b.min && count <= b.max) || BINS[4];
+            
+            return (
+              <GeoJSON
+                  key={d.district_id}
+                  data={d.boundary}
+                  style={{
+                    fillColor: bin.color,
+                    fillOpacity: 1,
+                    color: "#4f504f", 
+                    weight: 1,
+                  }}
+                  onEachFeature={(feature, layer) => {
+                     const numStr = d.district_id.replace(/^0+/, '');
+                     layer.bindTooltip(numStr, {
+                       permanent: true,
+                       direction: "center",
+                       className: "bg-transparent border-0 shadow-none text-gray-700 font-semibold text-xs text-shadow-sm",
+                     });
+                  }}
+                />
+            );
+          })}
+        </MapContainer>
+
+        {/* Home Button Overlay */}
+        <div className="absolute top-4 left-4 z-[500] bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500">
+          <Home size={20} />
+        </div>
+
+        {/* KPI Card Overlay */}
+        <div className="absolute top-8 right-8 z-[500] bg-[#e8e9eb] px-10 py-6 rounded-xl shadow-lg border border-gray-200 min-w-[240px] text-center">
+          <div className="text-5xl font-extralight text-black tracking-tight">
+            20,956
+          </div>
+          <div className="text-[13px] text-gray-500 mt-4">
+            Reported Incidents
+          </div>
+        </div>
+        <div className="absolute top-44 right-8 z-[500] text-[11px] italic text-gray-500">
+          Hold Ctrl to select many
+        </div>
+
+        {/* Legend Overlay */}
+        <div className="absolute bottom-6 left-6 z-[500] bg-[#e6e8ea] px-3 py-3 rounded-lg shadow-md border border-gray-200">
+          <div className="space-y-1.5 min-w-[140px]">
+            {BINS.map((bin, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="w-6 h-6 border border-gray-500" style={{ backgroundColor: bin.color }} />
+                <span className="text-[13px] text-gray-600 font-medium">{bin.label}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
-      <p className="text-right text-[11px] mt-2 italic" style={{ color: "var(--color-text-muted)" }}>
-        Hold Ctrl to select many
-      </p>
     </GscipCard>
   );
 }
