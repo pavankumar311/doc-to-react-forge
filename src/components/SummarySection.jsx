@@ -15,16 +15,28 @@ const MOCK_CRIME_TYPES = [
 ];
 
 const MOCK_DISTRICTS = [
-  { name: "006", count: 1540 },
-  { name: "011", count: 1537 },
+  { name: "001", count: 807 },
+  { name: "002", count: 950 },
   { name: "003", count: 1531 },
   { name: "004", count: 1524 },
+  { name: "005", count: 1100 },
+  { name: "006", count: 1540 },
   { name: "007", count: 1285 },
   { name: "008", count: 1241 },
   { name: "009", count: 1164 },
-  { name: "012", count: 1122 },
-  { name: "015", count: 1051 },
   { name: "010", count: 1031 },
+  { name: "011", count: 1537 },
+  { name: "012", count: 1122 },
+  { name: "014", count: 680 },
+  { name: "015", count: 1051 },
+  { name: "016", count: 450 },
+  { name: "017", count: 530 },
+  { name: "018", count: 870 },
+  { name: "019", count: 750 },
+  { name: "020", count: 490 },
+  { name: "022", count: 410 },
+  { name: "024", count: 500 },
+  { name: "025", count: 890 },
 ];
 
 const MOCK_DATE_DATA = [
