@@ -15,16 +15,28 @@ const MOCK_CRIME_TYPES = [
 ];
 
 const MOCK_DISTRICTS = [
-  { name: "006", count: 1540 },
-  { name: "011", count: 1537 },
+  { name: "001", count: 807 },
+  { name: "002", count: 950 },
   { name: "003", count: 1531 },
   { name: "004", count: 1524 },
+  { name: "005", count: 1100 },
+  { name: "006", count: 1540 },
   { name: "007", count: 1285 },
   { name: "008", count: 1241 },
   { name: "009", count: 1164 },
-  { name: "012", count: 1122 },
-  { name: "015", count: 1051 },
   { name: "010", count: 1031 },
+  { name: "011", count: 1537 },
+  { name: "012", count: 1122 },
+  { name: "014", count: 680 },
+  { name: "015", count: 1051 },
+  { name: "016", count: 450 },
+  { name: "017", count: 530 },
+  { name: "018", count: 870 },
+  { name: "019", count: 750 },
+  { name: "020", count: 490 },
+  { name: "022", count: 410 },
+  { name: "024", count: 500 },
+  { name: "025", count: 890 },
 ];
 
 const MOCK_DATE_DATA = [
@@ -285,13 +297,19 @@ function MapPanel({ totalIncidents }) {
         const res = await fetch("/chicago_districts.geojson");
         const data = await res.json();
         if (data && data.features) {
-          const mappedDistricts = data.features.map(f => {
+          // Deduplicate by dist_num (keep first occurrence)
+          const seen = new Set();
+          const mappedDistricts = [];
+          for (const f of data.features) {
             const rawId = f.properties.dist_num || f.properties.district || f.properties.DIST_NUM || f.properties.DISTRICT;
-            return {
-              district_id: rawId ? String(rawId).padStart(3, '0') : "000",
-              boundary: f.geometry
-            };
-          });
+            const id = rawId ? String(rawId).padStart(3, '0') : "000";
+            if (seen.has(id)) continue;
+            seen.add(id);
+            mappedDistricts.push({
+              district_id: id,
+              boundary: { type: "Feature", geometry: f.geometry, properties: {} }
+            });
+          }
           setDistricts(mappedDistricts);
         }
       } catch (e) {
