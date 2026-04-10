@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
-import { Filter, MapPin, Home, Copy, SquareStack } from "lucide-react";
+import { Filter, MapPin, Home, Copy, SquareStack, ZoomIn, ZoomOut, Maximize, Minimize } from "lucide-react";
 import GscipCard from "./GscipCard";
 import { MapContainer, TileLayer, GeoJSON, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -288,10 +288,83 @@ function DropShadowPainter() {
   return null;
 }
 
+function MapZoomControls({ onZoomIn, onZoomOut, onReset, isFullscreen, onToggleFullscreen }) {
+  return (
+    <div className="absolute top-4 left-4 z-[500] flex flex-col gap-1.5">
+      <button
+        onClick={onReset}
+        className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500"
+        title="Reset view"
+      >
+        <Home size={18} />
+      </button>
+      <button
+        onClick={onZoomIn}
+        className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500"
+        title="Zoom in"
+      >
+        <ZoomIn size={18} />
+      </button>
+      <button
+        onClick={onZoomOut}
+        className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500"
+        title="Zoom out"
+      >
+        <ZoomOut size={18} />
+      </button>
+      <button
+        onClick={onToggleFullscreen}
+        className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500"
+        title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+      >
+        {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+      </button>
+    </div>
+  );
+}
+
+function MapRefSetter({ mapRefCb }) {
+  const map = useMap();
+  useEffect(() => { mapRefCb(map); }, [map, mapRefCb]);
+  return null;
+}
+
 function MapPanel({ totalIncidents }) {
   const [districts, setDistricts] = useState([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const mapRef = useRef(null);
+  const containerRef = useRef(null);
+  const DEFAULT_CENTER = [41.83, -87.72];
+  const DEFAULT_ZOOM = 10.5;
+
+  const setMapRef = useCallback((map) => { mapRef.current = map; }, []);
+
+  const handleZoomIn = () => mapRef.current?.zoomIn();
+  const handleZoomOut = () => mapRef.current?.zoomOut();
+  const handleReset = () => {
+    if (mapRef.current) {
+      mapRef.current.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    }
+  };
+
+  const toggleFullscreen = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  };
 
   useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      setTimeout(() => mapRef.current?.invalidateSize(), 200);
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
     const fetchDistricts = async () => {
       try {
         const res = await fetch("/chicago_districts.geojson");
@@ -336,14 +409,15 @@ function MapPanel({ totalIncidents }) {
         </div>
       </div>
 
-      <div className="relative rounded bg-[#eff1f1] border border-gray-200 overflow-hidden" style={{ height: 620 }}>
+      <div ref={containerRef} className={`relative rounded bg-[#eff1f1] border border-gray-200 overflow-hidden ${isFullscreen ? '' : ''}`} style={{ height: isFullscreen ? '100vh' : 620 }}>
         <MapContainer 
-          center={[41.83, -87.72]} 
-          zoom={10.5} 
-          scrollWheelZoom={false} 
+          center={DEFAULT_CENTER} 
+          zoom={DEFAULT_ZOOM} 
+          scrollWheelZoom={true} 
           className="w-full h-full bg-[#eff1f1]"
           zoomControl={false}
         >
+          <MapRefSetter mapRefCb={setMapRef} />
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"
           />
@@ -394,10 +468,13 @@ function MapPanel({ totalIncidents }) {
           })}
         </MapContainer>
 
-        {/* Home Button Overlay */}
-        <div className="absolute top-4 left-4 z-[500] bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500">
-          <Home size={20} />
-        </div>
+        <MapZoomControls
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onReset={handleReset}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={toggleFullscreen}
+        />
 
         {/* KPI Card Overlay */}
         <div className="absolute top-8 right-8 z-[500] bg-[#e8e9eb] px-10 py-6 rounded-xl shadow-lg border border-gray-200 min-w-[240px] text-center">
