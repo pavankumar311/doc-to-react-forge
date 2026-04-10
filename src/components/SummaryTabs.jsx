@@ -1,4 +1,4 @@
-const TABS = ["Police Districts", "Police Beats", "Wards", "Community Areas"];
+const TABS = ["Police Districts", "Police Beats", "Wards", "Community Areas", "Crimes"];
 
 export default function SummaryTabs({ activeTab, onTabChange }) {
   return (
