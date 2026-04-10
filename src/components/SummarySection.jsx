@@ -548,6 +548,147 @@ function MapPanel({ totalIncidents }) {
   );
 }
 
+const CRIME_SUB_TABS = ["Crime Site Information", "Map Area Crime", "Crime Dashboard"];
+
+function CrimeSiteInformation() {
+  return (
+    <GscipCard>
+      <div className="p-4">
+        <h3 className="text-lg font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>Crime Site Information</h3>
+        <p className="text-sm mb-4" style={{ color: "var(--color-text-secondary)" }}>
+          Use this application to view crime near a specific location / address or draw your own polygon of interest. Shows crime counts within the visible map area.
+        </p>
+        <div className="grid grid-cols-2 gap-6">
+          <div>
+            <div className="rounded-lg p-4 mb-4" style={{ background: "var(--color-bg-surface)", border: "1px solid var(--color-border)" }}>
+              <label className="text-xs font-semibold uppercase tracking-wider block mb-2" style={{ color: "var(--color-text-secondary)" }}>Location</label>
+              <input type="text" placeholder="Enter address or coordinates" className="w-full px-3 py-2 rounded text-sm" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }} />
+            </div>
+            <div className="rounded-lg p-4" style={{ background: "var(--color-bg-surface)", border: "1px solid var(--color-border)" }}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>Nearby Crimes</span>
+                <span className="text-xs font-mono px-2 py-0.5 rounded" style={{ background: "var(--color-bg-card)", color: "var(--color-text-secondary)" }}>28</span>
+              </div>
+              {[
+                { type: "VANDALISM", count: 6 },
+                { type: "MOTOR VEHICLE THEFT (INDEX)", count: 5 },
+                { type: "SIMPLE BATTERY", count: 5 },
+                { type: "FRAUD", count: 3 },
+                { type: "LARCENY - THEFT (INDEX)", count: 3 },
+                { type: "AGGRAVATED ASSAULT (INDEX)", count: 1 },
+              ].map((item) => (
+                <div key={item.type} className="flex items-center justify-between py-2" style={{ borderBottom: "1px solid var(--color-border)" }}>
+                  <span className="text-xs" style={{ color: "var(--color-text-primary)" }}>{item.type}</span>
+                  <span className="text-xs font-mono" style={{ color: "var(--color-text-secondary)" }}>{item.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-lg overflow-hidden" style={{ height: 380, border: "1px solid var(--color-border)" }}>
+            <MapContainer center={[41.88, -87.63]} zoom={13} style={{ height: "100%", width: "100%" }} zoomControl={false}>
+              <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+            </MapContainer>
+          </div>
+        </div>
+      </div>
+    </GscipCard>
+  );
+}
+
+function MapAreaCrime() {
+  return (
+    <GscipCard>
+      <div className="p-4">
+        <h3 className="text-lg font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>Map Area Crime</h3>
+        <p className="text-sm mb-4" style={{ color: "var(--color-text-secondary)" }}>
+          Use this application to view crime near a specific location / address or draw your own polygon of interest. Shows crime counts within the visible map area.
+        </p>
+        <div className="rounded-lg overflow-hidden" style={{ height: 400, border: "1px solid var(--color-border)" }}>
+          <MapContainer center={[41.85, -87.65]} zoom={11} style={{ height: "100%", width: "100%" }} zoomControl={false}>
+            <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+          </MapContainer>
+        </div>
+      </div>
+    </GscipCard>
+  );
+}
+
+function CrimeDashboard() {
+  return (
+    <GscipCard>
+      <div className="p-4">
+        <h3 className="text-lg font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>Crime Dashboard</h3>
+        <p className="text-sm mb-4" style={{ color: "var(--color-text-secondary)" }}>
+          Use this application to view crime by geographies like CPD District, CPD Beat, Ward and Community Area. Visualize how those polygons overlap. Includes interactive graphs like time of day & day of week.
+        </p>
+        <div className="grid grid-cols-2 gap-6">
+          <div className="rounded-lg overflow-hidden" style={{ height: 360, border: "1px solid var(--color-border)" }}>
+            <MapContainer center={[41.83, -87.72]} zoom={10} style={{ height: "100%", width: "100%" }} zoomControl={false}>
+              <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+            </MapContainer>
+          </div>
+          <div className="rounded-lg p-4" style={{ background: "var(--color-bg-surface)", border: "1px solid var(--color-border)" }}>
+            <h4 className="text-sm font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>Legend</h4>
+            <div className="space-y-2 mb-4">
+              <p className="text-xs font-semibold" style={{ color: "var(--color-text-secondary)" }}>Property Crime (Index)</p>
+              {[
+                { label: "05 - Burglary", color: "#1565C0" },
+                { label: "06 - Larceny/Theft", color: "#42A5F5" },
+                { label: "07 - Motor Vehicle Theft", color: "#7E57C2" },
+                { label: "09 - Arson", color: "#EF5350" },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                  <span className="text-xs" style={{ color: "var(--color-text-primary)" }}>{item.label}</span>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold" style={{ color: "var(--color-text-secondary)" }}>Number of Features</p>
+              {[55, 40, 30].map((n) => (
+                <div key={n} className="flex items-center gap-2">
+                  <div className="rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ width: 12 + n * 0.3, height: 12 + n * 0.3, backgroundColor: "#C62828" }}>{n}</div>
+                  <span className="text-xs" style={{ color: "var(--color-text-primary)" }}>{n}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </GscipCard>
+  );
+}
+
+function CrimesSection() {
+  const [subTab, setSubTab] = useState("Crime Site Information");
+
+  return (
+    <div>
+      {/* Sub-tabs */}
+      <div className="flex items-center gap-0 mb-6 rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+        {CRIME_SUB_TABS.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setSubTab(tab)}
+            className="flex-1 px-4 py-2.5 text-sm font-medium transition-all duration-200 relative"
+            style={{
+              background: subTab === tab ? "var(--color-bg-card)" : "var(--color-bg-surface)",
+              color: subTab === tab ? "var(--color-cobalt)" : "var(--color-text-secondary)",
+              borderBottom: subTab === tab ? "2px solid var(--color-cobalt)" : "2px solid transparent",
+            }}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {subTab === "Crime Site Information" && <CrimeSiteInformation />}
+      {subTab === "Map Area Crime" && <MapAreaCrime />}
+      {subTab === "Crime Dashboard" && <CrimeDashboard />}
+    </div>
+  );
+}
+
 export default function SummarySection({ activeTab = "Police Districts" }) {
   const [timeFrame, setTimeFrame] = useState("Last 365 days");
   const [selectedCrimes, setSelectedCrimes] = useState([]);
@@ -570,7 +711,6 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
   const applyCrimes = () => {};
   const applyDistricts = () => {};
 
-  // Beat-specific filter state (only used when Police Beats tab is active)
   const [selectedBeats, setSelectedBeats] = useState([]);
   const toggleBeat = (name) =>
     setSelectedBeats((prev) =>
@@ -580,9 +720,12 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
 
   const totalIncidents = MOCK_CRIME_TYPES.reduce((sum, c) => sum + c.count, 0);
 
-  // Pick data and labels based on the active tab
   const tabConfig = TAB_DATA[activeTab] || TAB_DATA["Police Districts"];
   const isBeatsTab = activeTab === "Police Beats";
+
+  if (activeTab === "Crimes") {
+    return <CrimesSection />;
+  }
 
   return (
     <>
@@ -606,11 +749,9 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
         </div>
       </div>
 
-      {/* Second row: Police Beats stacks District + Beat panels vertically in col-3; others use col-3 + col-9 */}
       <div className="grid grid-cols-12 gap-4 mb-6">
         {isBeatsTab ? (
           <>
-            {/* District stacked on top of Beat — both in a single col-span-3 */}
             <div className="col-span-3 flex flex-col gap-4">
               <DistrictFilterPanel
                 districts={MOCK_DISTRICTS}
@@ -631,7 +772,6 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
                 compact
               />
             </div>
-            {/* Date chart takes full remaining 9 cols — taller to match stacked panels */}
             <div className="col-span-9">
               <IncidentsByDateChart data={MOCK_DATE_DATA} chartHeight={500} />
             </div>
