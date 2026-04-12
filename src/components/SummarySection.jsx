@@ -902,48 +902,382 @@ function MapAreaCrime() {
 }
 
 function CrimeDashboard() {
+  const [districts, setDistricts] = useState([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const mapRef = useRef(null);
+  const containerRef = useRef(null);
+  const DEFAULT_CENTER = [41.83, -87.72];
+  const DEFAULT_ZOOM = 10.5;
+
+  const setMapRef = useCallback((map) => { mapRef.current = map; }, []);
+  const handleZoomIn = () => mapRef.current?.zoomIn();
+  const handleZoomOut = () => mapRef.current?.zoomOut();
+  const handleReset = () => mapRef.current?.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+
+  const toggleFullscreen = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  };
+
+  useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      setTimeout(() => mapRef.current?.invalidateSize(), 200);
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  useEffect(() => {
+    const fetchDistricts = async () => {
+      try {
+        const res = await fetch("/chicago_districts.geojson");
+        const data = await res.json();
+        if (data?.features) {
+          const seen = new Set();
+          const mapped = [];
+          for (const f of data.features) {
+            const rawId = f.properties.dist_num || f.properties.district || f.properties.DIST_NUM || f.properties.DISTRICT;
+            const id = rawId ? String(rawId).padStart(3, '0') : "000";
+            if (seen.has(id)) continue;
+            seen.add(id);
+            mapped.push({ district_id: id, boundary: { type: "Feature", geometry: f.geometry, properties: {} } });
+          }
+          setDistricts(mapped);
+        }
+      } catch (e) { console.error("Failed to load GeoJSON", e); }
+    };
+    fetchDistricts();
+  }, []);
+
+  const countsMap = useMemo(() => {
+    const m = new Map();
+    MOCK_DISTRICTS.forEach(d => m.set(d.name, d.count));
+    return m;
+  }, []);
+
+  const crimeMarkers = useMemo(() => {
+    if (!districts.length) return [];
+    const markers = [];
+    const CATEGORIES = [
+      { type: "violent", color: "#e53935" },
+      { type: "property", color: "#42A5F5" },
+      { type: "other", color: "#FDD835" },
+    ];
+    districts.forEach((d) => {
+      if (!d.boundary) return;
+      const centroid = getCentroid(d.boundary.geometry || d.boundary);
+      const totalCount = countsMap.get(d.district_id) || 450;
+      const vCount = Math.round(totalCount * 0.15);
+      const pCount = Math.round(totalCount * 0.45);
+      const oCount = totalCount - vCount - pCount;
+      const counts = [vCount, pCount, oCount];
+      CATEGORIES.forEach((cat, i) => {
+        const offset = [(i - 1) * 0.012, (i - 1) * 0.008];
+        markers.push({
+          id: `${d.district_id}-${cat.type}`,
+          lat: centroid[0] + offset[1],
+          lon: centroid[1] + offset[0],
+          count: counts[i],
+          color: cat.color,
+          type: cat.type,
+        });
+      });
+    });
+    return markers;
+  }, [districts, countsMap]);
+
+  const MOCK_INCIDENTS = [
+    {
+      title: "AGGRAVATED BATTERY (INDEX)",
+      subtitle: "BATTERY - AGGRAVATED - OTHER DANGEROUS WEAPON",
+      datetime: "4/4/26, 10:25 AM BAR OR TAVERN of 17XX W BALMORAL AVE",
+      address: "17XX W BALMORAL AVE",
+      occurrence: "4/4/26, 10:25 AM",
+      description: "AGGRAVATED - OTHER DANGEROUS WEAPON",
+      rd: "JK209062",
+      iucr: "0430",
+      beat: "2012",
+      ward: "40",
+      community: "EDGEWATER",
+      icon: "🔴",
+      iconColor: "#e53935",
+    },
+    {
+      title: "MOTOR VEHICLE THEFT (INDEX)",
+      subtitle: "MOTOR VEHICLE THEFT - AUTOMOBILE",
+      datetime: "4/4/26, 10:15 AM STREET of 21XX E 91ST ST",
+      address: "21XX E 91ST ST",
+      occurrence: "4/4/26, 10:15 AM",
+      description: "AUTOMOBILE",
+      rd: "JK205251",
+      iucr: "0910",
+      beat: "0413",
+      ward: "7",
+      community: "CALUMET HEIGHTS",
+      icon: "🚗",
+      iconColor: "#1565C0",
+    },
+    {
+      title: "LARCENY - THEFT (INDEX)",
+      subtitle: "THEFT - FROM BUILDING",
+      datetime: "4/4/26, 10:14 AM APARTMENT of 24XX W LEXINGTON ST",
+      address: "24XX W LEXINGTON ST",
+      occurrence: "4/4/26, 10:14 AM",
+      description: "FROM BUILDING",
+      rd: "JK208741",
+      iucr: "0820",
+      beat: "1113",
+      ward: "28",
+      community: "NEAR WEST SIDE",
+      icon: "📦",
+      iconColor: "#42A5F5",
+    },
+    {
+      title: "ROBBERY (INDEX)",
+      subtitle: "ROBBERY - ARMED: HANDGUN",
+      datetime: "4/4/26, 09:50 AM SIDEWALK of 63XX S KING DR",
+      address: "63XX S KING DR",
+      occurrence: "4/4/26, 09:50 AM",
+      description: "ARMED: HANDGUN",
+      rd: "JK209105",
+      iucr: "0312",
+      beat: "0312",
+      ward: "20",
+      community: "WOODLAWN",
+      icon: "⚠️",
+      iconColor: "#c62828",
+    },
+  ];
+
+  const FILTER_ITEMS = [
+    { label: "Police District", value: "All" },
+    { label: "Police Beat", value: "All" },
+    { label: "Ward", value: "All" },
+    { label: "Community", value: "All" },
+    { label: "Crime Types", value: "All Crimes" },
+    { label: "Crime Groups", value: "All" },
+    { label: "Date (backdated 7 days)", value: "Last 2 Weeks" },
+  ];
+
+  const VIOLENT_LEGEND = [
+    { code: "01A", label: "Homicide", color: "#e53935" },
+    { code: "02", label: "Sexual Assault", color: "#d81b60" },
+    { code: "03", label: "Robbery", color: "#c62828" },
+    { code: "04A", label: "Aggravated Assault", color: "#e65100" },
+    { code: "04B", label: "Aggravated Battery", color: "#bf360c" },
+  ];
+  const PROPERTY_LEGEND = [
+    { code: "05", label: "Burglary", color: "#1565C0" },
+    { code: "06", label: "Larceny/Theft", color: "#42A5F5" },
+    { code: "07", label: "Motor Vehicle Theft", color: "#7E57C2" },
+    { code: "09", label: "Arson", color: "#EF5350" },
+  ];
+  const FEATURE_SIZES = [
+    { count: "> 783", size: 30, color: "#c62828" },
+    { count: "600", size: 26, color: "#e53935" },
+    { count: "400", size: 22, color: "#ef5350" },
+    { count: "200", size: 18, color: "#ef9a9a" },
+    { count: "< 2", size: 12, color: "#ffcdd2" },
+  ];
+
+  const [bottomTab, setBottomTab] = useState("Crime Incidents");
+
   return (
-    <GscipCard>
-      <div className="p-4">
-        <h3 className="text-lg font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>Crime Dashboard</h3>
-        <p className="text-sm mb-4" style={{ color: "var(--color-text-secondary)" }}>
-          Use this application to view crime by geographies like CPD District, CPD Beat, Ward and Community Area. Visualize how those polygons overlap. Includes interactive graphs like time of day & day of week.
-        </p>
-        <div className="grid grid-cols-2 gap-6">
-          <div className="rounded-lg overflow-hidden" style={{ height: 360, border: "1px solid var(--color-border)" }}>
-            <MapContainer center={[41.83, -87.72]} zoom={10} style={{ height: "100%", width: "100%" }} zoomControl={false}>
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-            </MapContainer>
+    <div ref={containerRef} className={isFullscreen ? "fixed inset-0 z-[9999] bg-white overflow-auto" : ""}>
+      {/* Title + Top Filter Bar */}
+      <div className="rounded-lg mb-3 overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+        <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid var(--color-border)", background: "var(--color-bg-card)" }}>
+          <h3 className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>Crime and Strategic Plans</h3>
+        </div>
+        <div className="flex items-center divide-x overflow-x-auto" style={{ background: "var(--color-bg-card)", borderColor: "var(--color-border)" }}>
+          {FILTER_ITEMS.map((f) => (
+            <div key={f.label} className="flex-1 px-4 py-2 min-w-[120px]">
+              <div className="text-xs font-semibold" style={{ color: "var(--color-text-primary)" }}>{f.label}</div>
+              <div className="text-xs" style={{ color: "#c0392b" }}>{f.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Main 3-column layout */}
+      <div className="grid grid-cols-12 gap-3" style={{ height: isFullscreen ? "calc(100vh - 140px)" : 560 }}>
+        {/* Left Panel: Stats + Crime Incidents */}
+        <div className="col-span-3 flex flex-col gap-3 overflow-hidden">
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: "Total Crime", value: "12,509", color: "#1565C0" },
+              { label: "Violent Crime", value: "1,053", color: "#c62828" },
+              { label: "Property Crime", value: "4,701", color: "#1565C0" },
+            ].map((s) => (
+              <div key={s.label} className="rounded-lg p-3 text-center" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
+                <div className="text-[10px] font-medium" style={{ color: "var(--color-text-secondary)" }}>{s.label}</div>
+                <div className="text-lg font-bold" style={{ color: s.color }}>{s.value}</div>
+                <div className="text-[8px]" style={{ color: "var(--color-text-muted)" }}>In visible map extent</div>
+              </div>
+            ))}
           </div>
-          <div className="rounded-lg p-4" style={{ background: "var(--color-bg-surface)", border: "1px solid var(--color-border)" }}>
-            <h4 className="text-sm font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>Legend</h4>
-            <div className="space-y-2 mb-4">
-              <p className="text-xs font-semibold" style={{ color: "var(--color-text-secondary)" }}>Property Crime (Index)</p>
-              {[
-                { label: "05 - Burglary", color: "#1565C0" },
-                { label: "06 - Larceny/Theft", color: "#42A5F5" },
-                { label: "07 - Motor Vehicle Theft", color: "#7E57C2" },
-                { label: "09 - Arson", color: "#EF5350" },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-xs" style={{ color: "var(--color-text-primary)" }}>{item.label}</span>
+
+          {/* Crime Incidents List */}
+          <div className="flex-1 rounded-lg overflow-hidden flex flex-col" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
+            <div className="px-4 pt-3 pb-1 text-center">
+              <h4 className="text-base font-bold" style={{ color: "#1565C0" }}>Crime Incidents</h4>
+              <p className="text-[10px]" style={{ color: "#c0392b" }}>Most recent data is from 7 days before yesterday</p>
+            </div>
+            <div className="px-3 py-2">
+              <div className="flex items-center rounded px-2 py-1.5" style={{ background: "var(--color-bg-surface)", border: "1px solid var(--color-border)" }}>
+                <span className="text-xs mr-2" style={{ color: "var(--color-text-muted)" }}>🔍</span>
+                <input type="text" placeholder="Search..." className="flex-1 text-xs bg-transparent outline-none" style={{ color: "var(--color-text-primary)" }} />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-3 pb-2">
+              {MOCK_INCIDENTS.map((inc, idx) => (
+                <div key={idx} className="py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
+                  <div className="text-xs font-bold" style={{ color: "var(--color-text-primary)" }}>{inc.title}</div>
+                  <div className="text-[10px]" style={{ color: "var(--color-text-secondary)" }}>{inc.subtitle}</div>
+                  <div className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>{inc.datetime}</div>
+                  <div className="flex items-start gap-2 mt-2">
+                    <div className="w-8 h-8 rounded flex items-center justify-center text-white text-sm flex-shrink-0" style={{ background: inc.iconColor }}>{inc.icon}</div>
+                    <div className="flex-1">
+                      <div className="text-[10px]" style={{ color: "var(--color-text-primary)" }}>📍 Address: <b>{inc.address}</b></div>
+                      <div className="text-[10px]" style={{ color: "var(--color-text-primary)" }}>📅 Date of Occurrence: <b>{inc.occurrence}</b></div>
+                      <div className="text-[10px] mt-1" style={{ color: "#c0392b" }}>
+                        Description: <b>{inc.description}</b>
+                      </div>
+                      <div className="text-[10px]" style={{ color: "#c0392b" }}>
+                        RD <b>{inc.rd}</b> | IUCR <b>{inc.iucr}</b>
+                      </div>
+                      <div className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+                        Beat {inc.beat} | Ward {inc.ward} | Community <b>{inc.community}</b>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
-            <div className="space-y-2">
-              <p className="text-xs font-semibold" style={{ color: "var(--color-text-secondary)" }}>Number of Features</p>
-              {[55, 40, 30].map((n) => (
-                <div key={n} className="flex items-center gap-2">
-                  <div className="rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ width: 12 + n * 0.3, height: 12 + n * 0.3, backgroundColor: "#C62828" }}>{n}</div>
-                  <span className="text-xs" style={{ color: "var(--color-text-primary)" }}>{n}</span>
-                </div>
+            {/* Bottom tabs */}
+            <div className="flex" style={{ borderTop: "1px solid var(--color-border)" }}>
+              {["Crime Incidents", "Strategic Plans"].map((t) => (
+                <button key={t} onClick={() => setBottomTab(t)} className="flex-1 px-3 py-2 text-xs font-medium transition-all" style={{
+                  background: bottomTab === t ? "var(--color-bg-card)" : "var(--color-bg-surface)",
+                  color: bottomTab === t ? "var(--color-text-primary)" : "var(--color-text-muted)",
+                  borderBottom: bottomTab === t ? "2px solid #1565C0" : "2px solid transparent",
+                }}>{t}</button>
               ))}
             </div>
           </div>
         </div>
+
+        {/* Center Map */}
+        <div className="col-span-6 relative rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+          <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} scrollWheelZoom className="w-full h-full" style={{ background: "#eff1f1" }} zoomControl={false}>
+            <MapRefSetter mapRefCb={setMapRef} />
+            <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+            {districts.filter(d => d.boundary).map(d => (
+              <GeoJSON
+                key={d.district_id}
+                data={d.boundary}
+                style={{ fillColor: "transparent", fillOpacity: 0, color: "#222", weight: 2 }}
+                onEachFeature={(feature, layer) => {
+                  const count = countsMap.get(d.district_id) || 450;
+                  layer.bindPopup(
+                    `<div style="font-size:13px;line-height:1.6;padding:2px 4px;"><b>District:</b> ${d.district_id}<br/><b>Incidents:</b> ${count.toLocaleString()}</div>`
+                  );
+                  layer.on({
+                    mouseover: (e) => e.target.setStyle({ weight: 3, color: "#000" }),
+                    mouseout: (e) => e.target.setStyle({ weight: 2, color: "#222" }),
+                  });
+                }}
+              />
+            ))}
+            {crimeMarkers.map(m => {
+              const sz = Math.max(24, Math.min(44, 18 + m.count / 30));
+              return (
+                <Marker
+                  key={m.id}
+                  position={[m.lat, m.lon]}
+                  icon={L.divIcon({
+                    html: `<div style="
+                      background:${m.color};width:${sz}px;height:${sz}px;border-radius:50%;
+                      display:flex;align-items:center;justify-content:center;
+                      color:#fff;font-weight:800;font-size:${Math.max(10, sz * 0.32)}px;
+                      border:2px solid rgba(255,255,255,0.7);
+                      box-shadow:0 2px 8px rgba(0,0,0,0.35);cursor:pointer;
+                    ">${m.count}</div>`,
+                    className: "",
+                    iconSize: [sz, sz],
+                    iconAnchor: [sz / 2, sz / 2],
+                  })}
+                />
+              );
+            })}
+          </MapContainer>
+          <MapZoomControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={handleReset} isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen} />
+          {/* Bottom map tabs */}
+          <div className="absolute bottom-0 left-0 z-[500] flex bg-white rounded-tr-lg shadow" style={{ border: "1px solid var(--color-border)" }}>
+            {["Crime Map", "Crime Statistics"].map((t, i) => (
+              <button key={t} className="px-4 py-2 text-xs font-medium" style={{
+                color: i === 0 ? "#1565C0" : "var(--color-text-muted)",
+                borderBottom: i === 0 ? "2px solid #1565C0" : "none",
+              }}>{t}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Right Legend Panel */}
+        <div className="col-span-3 overflow-y-auto rounded-lg p-4" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
+          <h4 className="text-sm font-bold mb-3" style={{ color: "var(--color-text-primary)" }}>Crime</h4>
+
+          <p className="text-xs font-semibold mb-2" style={{ color: "#c0392b" }}>Violent Crime (Index)</p>
+          <div className="space-y-1.5 mb-4">
+            {VIOLENT_LEGEND.map((item) => (
+              <div key={item.code} className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{ backgroundColor: item.color }}>
+                  <span className="text-white text-[8px] font-bold">!</span>
+                </div>
+                <span className="text-xs" style={{ color: "var(--color-text-primary)" }}>{item.code} - {item.label}</span>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-xs font-semibold mb-2" style={{ color: "#1565C0" }}>Property Crime (Index)</p>
+          <div className="space-y-1.5 mb-4">
+            {PROPERTY_LEGEND.map((item) => (
+              <div key={item.code} className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full" style={{ backgroundColor: item.color }} />
+                <span className="text-xs" style={{ color: "var(--color-text-primary)" }}>{item.code} - {item.label}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: "#FDD835" }} />
+            <span className="text-xs" style={{ color: "#c0392b" }}>Other Crimes (Non-Index)</span>
+          </div>
+
+          <p className="text-xs font-semibold mb-2" style={{ color: "var(--color-text-secondary)" }}>Number of features</p>
+          <div className="space-y-2 mb-4">
+            {FEATURE_SIZES.map((item) => (
+              <div key={item.count} className="flex items-center gap-2">
+                <div className="rounded-full flex items-center justify-center text-white font-bold" style={{ width: item.size, height: item.size, backgroundColor: item.color, fontSize: Math.max(8, item.size * 0.35) }}></div>
+                <span className="text-xs" style={{ color: "var(--color-text-primary)" }}>{item.count}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="border-t pt-3" style={{ borderColor: "var(--color-border)" }}>
+            <p className="text-xs font-bold mb-2" style={{ color: "var(--color-text-primary)" }}>Police Beats</p>
+            <div className="w-8 h-8 border-2 border-dashed rounded" style={{ borderColor: "#1565C0" }} />
+          </div>
+        </div>
       </div>
-    </GscipCard>
+    </div>
   );
 }
 
