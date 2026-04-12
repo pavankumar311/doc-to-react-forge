@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
 import { Filter, MapPin, Home, Copy, SquareStack, ZoomIn, ZoomOut, Maximize, Minimize } from "lucide-react";
 import GscipCard from "./GscipCard";
-import { MapContainer, TileLayer, GeoJSON, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, GeoJSON, Marker, useMap } from "react-leaflet";
 import L from "leaflet";
 import { AUTH_TOKEN } from "../services/api";
 
@@ -658,6 +658,38 @@ function MapAreaCrime() {
     MOCK_DISTRICTS.forEach(d => m.set(d.name, d.count));
     return m;
   }, []);
+
+  // Generate crime cluster markers from district centroids
+  const crimeMarkers = useMemo(() => {
+    if (!districts.length) return [];
+    const markers = [];
+    const CATEGORIES = [
+      { type: "violent", color: "#e53935" },
+      { type: "property", color: "#42A5F5" },
+      { type: "other", color: "#FDD835" },
+    ];
+    districts.forEach((d) => {
+      if (!d.boundary) return;
+      const centroid = getCentroid(d.boundary.geometry || d.boundary);
+      const totalCount = countsMap.get(d.district_id) || 450;
+      const vCount = Math.round(totalCount * 0.15);
+      const pCount = Math.round(totalCount * 0.45);
+      const oCount = totalCount - vCount - pCount;
+      const counts = [vCount, pCount, oCount];
+      CATEGORIES.forEach((cat, i) => {
+        const offset = [(i - 1) * 0.012, (i - 1) * 0.008];
+        markers.push({
+          id: `${d.district_id}-${cat.type}`,
+          lat: centroid[0] + offset[1],
+          lon: centroid[1] + offset[0],
+          count: counts[i],
+          color: cat.color,
+          type: cat.type,
+        });
+      });
+    });
+    return markers;
+  }, [districts, countsMap]);
 
   const totalCrimes = 7790;
   const violentCrimes = 652;
