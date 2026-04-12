@@ -596,20 +596,259 @@ function CrimeSiteInformation() {
 }
 
 function MapAreaCrime() {
+  const [districts, setDistricts] = useState([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [last2Weeks, setLast2Weeks] = useState(true);
+  const [violentCrime, setViolentCrime] = useState(true);
+  const [propertyCrime, setPropertyCrime] = useState(true);
+  const [otherCrime, setOtherCrime] = useState(true);
+  const mapRef = useRef(null);
+  const containerRef = useRef(null);
+  const DEFAULT_CENTER = [41.83, -87.72];
+  const DEFAULT_ZOOM = 10.5;
+
+  const setMapRef = useCallback((map) => { mapRef.current = map; }, []);
+  const handleZoomIn = () => mapRef.current?.zoomIn();
+  const handleZoomOut = () => mapRef.current?.zoomOut();
+  const handleReset = () => mapRef.current?.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+
+  const toggleFullscreen = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  };
+
+  useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      setTimeout(() => mapRef.current?.invalidateSize(), 200);
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  useEffect(() => {
+    const fetchDistricts = async () => {
+      try {
+        const res = await fetch("/chicago_districts.geojson");
+        const data = await res.json();
+        if (data?.features) {
+          const seen = new Set();
+          const mapped = [];
+          for (const f of data.features) {
+            const rawId = f.properties.dist_num || f.properties.district || f.properties.DIST_NUM || f.properties.DISTRICT;
+            const id = rawId ? String(rawId).padStart(3, '0') : "000";
+            if (seen.has(id)) continue;
+            seen.add(id);
+            mapped.push({ district_id: id, boundary: { type: "Feature", geometry: f.geometry, properties: {} } });
+          }
+          setDistricts(mapped);
+        }
+      } catch (e) { console.error("Failed to load GeoJSON", e); }
+    };
+    fetchDistricts();
+  }, []);
+
+  const countsMap = useMemo(() => {
+    const m = new Map();
+    MOCK_DISTRICTS.forEach(d => m.set(d.name, d.count));
+    return m;
+  }, []);
+
+  const totalCrimes = 7790;
+  const violentCrimes = 652;
+  const propertyCrimes = 2938;
+  const otherCrimes = 4200;
+
+  const VIOLENT_LEGEND = [
+    { code: "01A", label: "Homicide", color: "#e53935" },
+    { code: "02", label: "Sexual Assault", color: "#d81b60" },
+    { code: "03", label: "Robbery", color: "#c62828" },
+    { code: "04A", label: "Aggravated Assault", color: "#e65100" },
+    { code: "04B", label: "Aggravated Battery", color: "#bf360c" },
+  ];
+  const PROPERTY_LEGEND = [
+    { code: "05", label: "Burglary", color: "#1565C0" },
+    { code: "06", label: "Larceny/Theft", color: "#42A5F5" },
+    { code: "07", label: "Motor Vehicle Theft", color: "#7E57C2" },
+    { code: "09", label: "Arson", color: "#EF5350" },
+  ];
+  const FEATURE_SIZES = [
+    { count: "> 447", size: 28, color: "#c62828" },
+    { count: "350", size: 24, color: "#e53935" },
+    { count: "200", size: 20, color: "#ef5350" },
+    { count: "100", size: 16, color: "#ef9a9a" },
+    { count: "< 2", size: 10, color: "#ffcdd2" },
+  ];
+
   return (
-    <GscipCard>
-      <div className="p-4">
-        <h3 className="text-lg font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>Map Area Crime</h3>
-        <p className="text-sm mb-4" style={{ color: "var(--color-text-secondary)" }}>
-          Use this application to view crime near a specific location / address or draw your own polygon of interest. Shows crime counts within the visible map area.
-        </p>
-        <div className="rounded-lg overflow-hidden" style={{ height: 400, border: "1px solid var(--color-border)" }}>
-          <MapContainer center={[41.85, -87.65]} zoom={11} style={{ height: "100%", width: "100%" }} zoomControl={false}>
-            <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+    <div ref={containerRef} className={isFullscreen ? "fixed inset-0 z-[9999] bg-white" : ""}>
+      {/* Stats Bar */}
+      <div className="grid grid-cols-4 gap-3 mb-3">
+        {[
+          { label: "Total Crimes", value: totalCrimes.toLocaleString(), color: "#1565C0" },
+          { label: "Violent Crimes", value: violentCrimes.toLocaleString(), color: "#c62828" },
+          { label: "Property Crimes", value: propertyCrimes.toLocaleString(), color: "#1565C0" },
+          { label: "Other Crimes", value: otherCrimes.toLocaleString(), color: "#e53935" },
+        ].map((stat) => (
+          <div key={stat.label} className="rounded-lg p-4 text-center" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
+            <div className="text-xs font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>{stat.label}</div>
+            <div className="text-2xl font-bold" style={{ color: stat.color }}>{stat.value}</div>
+            <div className="text-[10px] mt-1" style={{ color: "var(--color-text-muted)" }}>In visible map extent</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-12 gap-3" style={{ height: isFullscreen ? "calc(100vh - 120px)" : 540 }}>
+        {/* Left Filter Panel */}
+        <div className="col-span-3 overflow-y-auto rounded-lg p-4" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
+          <h4 className="text-base font-bold text-center mb-1" style={{ color: "var(--color-text-primary)" }}>Filter Records</h4>
+          <p className="text-[10px] text-center mb-4" style={{ color: "var(--color-text-muted)" }}>The most recent data was posted 7 days from yesterday.</p>
+
+          <div className="space-y-3 mb-5">
+            {[
+              { label: "Last 2 Weeks", checked: last2Weeks, onChange: () => setLast2Weeks(!last2Weeks) },
+              { label: "Violent Crime", checked: violentCrime, onChange: () => setViolentCrime(!violentCrime) },
+              { label: "Property Crime", checked: propertyCrime, onChange: () => setPropertyCrime(!propertyCrime) },
+              { label: "Other Crime", checked: otherCrime, onChange: () => setOtherCrime(!otherCrime) },
+            ].map((toggle) => (
+              <label key={toggle.label} className="flex items-center justify-between cursor-pointer">
+                <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>{toggle.label}</span>
+                <div className="relative inline-flex items-center">
+                  <input type="checkbox" checked={toggle.checked} onChange={toggle.onChange} className="sr-only peer" />
+                  <div className="w-9 h-5 rounded-full peer-checked:bg-blue-600 bg-gray-300 transition-colors" />
+                  <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+                </div>
+              </label>
+            ))}
+          </div>
+
+          <div className="rounded-lg p-3 mb-4" style={{ background: "var(--color-bg-surface)", border: "1px solid var(--color-border)" }}>
+            <div className="flex items-center gap-1 mb-2">
+              <span className="text-xs font-semibold" style={{ color: "var(--color-text-primary)" }}>📅 Custom Date Range</span>
+            </div>
+            <div className="text-[10px] mb-2" style={{ color: "var(--color-text-secondary)" }}>Date of Incident is between</div>
+            <div className="flex gap-2">
+              <input type="date" className="flex-1 px-2 py-1 text-xs rounded" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }} />
+              <span className="text-xs self-center" style={{ color: "var(--color-text-muted)" }}>and</span>
+              <input type="date" className="flex-1 px-2 py-1 text-xs rounded" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }} />
+            </div>
+            <p className="text-[9px] mt-2" style={{ color: "var(--color-text-muted)" }}>Oldest data from 1 year ago.</p>
+          </div>
+
+          <div className="border-t pt-4" style={{ borderColor: "var(--color-border)" }}>
+            <h5 className="text-sm font-bold text-center mb-1" style={{ color: "#1565C0" }}>Find Crime Near</h5>
+            <p className="text-[10px] text-center mb-3" style={{ color: "var(--color-text-muted)" }}>Enter address below to view nearby crime.</p>
+            <div className="flex gap-2">
+              <input type="text" placeholder="Find address or place" className="flex-1 px-3 py-2 text-sm rounded" style={{ background: "var(--color-bg-surface)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }} />
+              <button className="px-3 py-2 rounded text-white" style={{ background: "#1565C0" }}>🔍</button>
+            </div>
+            <div className="mt-3">
+              <span className="text-xs font-medium" style={{ color: "var(--color-text-secondary)" }}>Location</span>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="flex gap-1">
+                  {["📍", "📐", "🔲"].map((icon, i) => (
+                    <button key={i} className="p-1.5 rounded text-sm" style={{ background: "var(--color-bg-surface)", border: "1px solid var(--color-border)" }}>{icon}</button>
+                  ))}
+                </div>
+                <input type="number" defaultValue={660} className="w-16 px-2 py-1 text-xs rounded" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }} />
+                <select className="px-2 py-1 text-xs rounded" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}>
+                  <option>Feet</option>
+                  <option>Miles</option>
+                  <option>Meters</option>
+                </select>
+              </div>
+              <p className="text-[9px] mt-2" style={{ color: "#1565C0" }}>Draw your own point, line or polygon and buffer by a set distance.</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Center Map */}
+        <div className="col-span-6 relative rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+          <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} scrollWheelZoom className="w-full h-full" style={{ background: "#eff1f1" }} zoomControl={false}>
+            <MapRefSetter mapRefCb={setMapRef} />
+            <TileLayer url="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png" />
+            <DropShadowPainter />
+            {districts.filter(d => d.boundary).map(d => {
+              const count = countsMap.get(d.district_id) || 450;
+              const bin = BINS.find(b => count >= b.min && count <= b.max) || BINS[4];
+              return (
+                <GeoJSON
+                  key={d.district_id}
+                  data={d.boundary}
+                  style={{ fillColor: bin.color, fillOpacity: 1, color: "#4f504f", weight: 1 }}
+                  onEachFeature={(feature, layer) => {
+                    const numStr = d.district_id.replace(/^0+/, '');
+                    layer.bindTooltip(
+                      `<div style="font-size:16px;font-weight:800;color:#1565C0;">${count}</div>`,
+                      { permanent: true, direction: "center", className: "bg-transparent border-0 shadow-none" }
+                    );
+                    layer.bindPopup(
+                      `<div style="font-size:13px;line-height:1.6;padding:2px 4px;"><b>District:</b> ${d.district_id}<br/><b>Incidents:</b> ${count.toLocaleString()}</div>`
+                    );
+                    layer.on({
+                      mouseover: (e) => e.target.setStyle({ weight: 3, color: "#333", fillOpacity: 0.85 }),
+                      mouseout: (e) => e.target.setStyle({ weight: 1, color: "#4f504f", fillOpacity: 1 }),
+                    });
+                  }}
+                />
+              );
+            })}
           </MapContainer>
+          <MapZoomControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={handleReset} isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen} />
+        </div>
+
+        {/* Right Legend Panel */}
+        <div className="col-span-3 overflow-y-auto rounded-lg p-4" style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
+          <h4 className="text-sm font-bold mb-3" style={{ color: "var(--color-text-primary)" }}>Crime</h4>
+
+          <p className="text-xs font-semibold mb-2" style={{ color: "var(--color-text-secondary)" }}>Violent Crime (Index)</p>
+          <div className="space-y-1.5 mb-4">
+            {VIOLENT_LEGEND.map((item) => (
+              <div key={item.code} className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{ backgroundColor: item.color }}>
+                  <span className="text-white text-[8px] font-bold">!</span>
+                </div>
+                <span className="text-xs" style={{ color: "var(--color-text-primary)" }}>{item.code} - {item.label}</span>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-xs font-semibold mb-2" style={{ color: "var(--color-text-secondary)" }}>Property Crime (Index)</p>
+          <div className="space-y-1.5 mb-4">
+            {PROPERTY_LEGEND.map((item) => (
+              <div key={item.code} className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded-full" style={{ backgroundColor: item.color }} />
+                <span className="text-xs" style={{ color: "var(--color-text-primary)" }}>{item.code} - {item.label}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: "#FDD835" }} />
+            <span className="text-xs" style={{ color: "var(--color-text-primary)" }}>Other Crimes (Non-Index)</span>
+          </div>
+
+          <p className="text-xs font-semibold mb-2" style={{ color: "var(--color-text-secondary)" }}>Number of features</p>
+          <div className="space-y-2">
+            {FEATURE_SIZES.map((item) => (
+              <div key={item.count} className="flex items-center gap-2">
+                <div className="rounded-full flex items-center justify-center text-white font-bold" style={{ width: item.size, height: item.size, backgroundColor: item.color, fontSize: Math.max(8, item.size * 0.35) }}></div>
+                <span className="text-xs" style={{ color: "var(--color-text-primary)" }}>{item.count}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="border-t mt-4 pt-3" style={{ borderColor: "var(--color-border)" }}>
+            <p className="text-xs font-semibold mb-1" style={{ color: "var(--color-text-secondary)" }}>Police Districts</p>
+          </div>
         </div>
       </div>
-    </GscipCard>
+    </div>
   );
 }
 
