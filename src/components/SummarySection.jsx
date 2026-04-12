@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
 import { Filter, MapPin, Home, Copy, SquareStack, ZoomIn, ZoomOut, Maximize, Minimize } from "lucide-react";
 import GscipCard from "./GscipCard";
-import { MapContainer, TileLayer, GeoJSON, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, GeoJSON, Marker, useMap } from "react-leaflet";
 import L from "leaflet";
 import { AUTH_TOKEN } from "../services/api";
 
@@ -659,6 +659,38 @@ function MapAreaCrime() {
     return m;
   }, []);
 
+  // Generate crime cluster markers from district centroids
+  const crimeMarkers = useMemo(() => {
+    if (!districts.length) return [];
+    const markers = [];
+    const CATEGORIES = [
+      { type: "violent", color: "#e53935" },
+      { type: "property", color: "#42A5F5" },
+      { type: "other", color: "#FDD835" },
+    ];
+    districts.forEach((d) => {
+      if (!d.boundary) return;
+      const centroid = getCentroid(d.boundary.geometry || d.boundary);
+      const totalCount = countsMap.get(d.district_id) || 450;
+      const vCount = Math.round(totalCount * 0.15);
+      const pCount = Math.round(totalCount * 0.45);
+      const oCount = totalCount - vCount - pCount;
+      const counts = [vCount, pCount, oCount];
+      CATEGORIES.forEach((cat, i) => {
+        const offset = [(i - 1) * 0.012, (i - 1) * 0.008];
+        markers.push({
+          id: `${d.district_id}-${cat.type}`,
+          lat: centroid[0] + offset[1],
+          lon: centroid[1] + offset[0],
+          count: counts[i],
+          color: cat.color,
+          type: cat.type,
+        });
+      });
+    });
+    return markers;
+  }, [districts, countsMap]);
+
   const totalCrimes = 7790;
   const violentCrimes = 652;
   const propertyCrimes = 2938;
@@ -771,33 +803,50 @@ function MapAreaCrime() {
         <div className="col-span-6 relative rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
           <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} scrollWheelZoom className="w-full h-full" style={{ background: "#eff1f1" }} zoomControl={false}>
             <MapRefSetter mapRefCb={setMapRef} />
-            <TileLayer url="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png" />
-            <DropShadowPainter />
-            {districts.filter(d => d.boundary).map(d => {
-              const count = countsMap.get(d.district_id) || 450;
-              const bin = BINS.find(b => count >= b.min && count <= b.max) || BINS[4];
-              return (
-                <GeoJSON
-                  key={d.district_id}
-                  data={d.boundary}
-                  style={{ fillColor: bin.color, fillOpacity: 1, color: "#4f504f", weight: 1 }}
-                  onEachFeature={(feature, layer) => {
-                    const numStr = d.district_id.replace(/^0+/, '');
-                    layer.bindTooltip(
-                      `<div style="font-size:16px;font-weight:800;color:#1565C0;">${count}</div>`,
-                      { permanent: true, direction: "center", className: "bg-transparent border-0 shadow-none" }
-                    );
-                    layer.bindPopup(
-                      `<div style="font-size:13px;line-height:1.6;padding:2px 4px;"><b>District:</b> ${d.district_id}<br/><b>Incidents:</b> ${count.toLocaleString()}</div>`
-                    );
-                    layer.on({
-                      mouseover: (e) => e.target.setStyle({ weight: 3, color: "#333", fillOpacity: 0.85 }),
-                      mouseout: (e) => e.target.setStyle({ weight: 1, color: "#4f504f", fillOpacity: 1 }),
-                    });
-                  }}
-                />
-              );
-            })}
+            <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+            {districts.filter(d => d.boundary).map(d => (
+              <GeoJSON
+                key={d.district_id}
+                data={d.boundary}
+                style={{ fillColor: "transparent", fillOpacity: 0, color: "#222", weight: 2 }}
+                onEachFeature={(feature, layer) => {
+                  const count = countsMap.get(d.district_id) || 450;
+                  layer.bindPopup(
+                    `<div style="font-size:13px;line-height:1.6;padding:2px 4px;"><b>District:</b> ${d.district_id}<br/><b>Incidents:</b> ${count.toLocaleString()}</div>`
+                  );
+                  layer.on({
+                    mouseover: (e) => e.target.setStyle({ weight: 3, color: "#000" }),
+                    mouseout: (e) => e.target.setStyle({ weight: 2, color: "#222" }),
+                  });
+                }}
+              />
+            ))}
+            {crimeMarkers
+              .filter(m => (m.type === "violent" && violentCrime) || (m.type === "property" && propertyCrime) || (m.type === "other" && otherCrime))
+              .map(m => {
+                const sz = Math.max(24, Math.min(44, 18 + m.count / 30));
+                return (
+                  <Marker
+                    key={m.id}
+                    position={[m.lat, m.lon]}
+                    icon={L.divIcon({
+                      html: `<div style="
+                        background:${m.color};
+                        width:${sz}px;height:${sz}px;
+                        border-radius:50%;
+                        display:flex;align-items:center;justify-content:center;
+                        color:#fff;font-weight:800;font-size:${Math.max(10, sz * 0.32)}px;
+                        border:2px solid rgba(255,255,255,0.7);
+                        box-shadow:0 2px 8px rgba(0,0,0,0.35);
+                        cursor:pointer;
+                      ">${m.count}</div>`,
+                      className: "",
+                      iconSize: [sz, sz],
+                      iconAnchor: [sz / 2, sz / 2],
+                    })}
+                  />
+                );
+              })}
           </MapContainer>
           <MapZoomControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={handleReset} isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen} />
         </div>
