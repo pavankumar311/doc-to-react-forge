@@ -89,47 +89,97 @@ const BUBBLE_SIZES = [
   { label: "< 2", size: 8, color: "#C62828" },
 ];
 
-// Mock crime incident clusters for the map (Chicago area)
-function generateMockIncidents() {
-  const chicagoCenter = [41.83, -87.68];
-  const incidents = [];
-  // color / borderColor / textColor match the reference image:
-  // yellow clusters (larceny/property-heavy)  blue teal (general) red (violent)
-  const types = [
-    { category: "violent",  color: "#e53935", borderColor: "#b71c1c", textColor: "#fff" },
-    { category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff" },
-    { category: "other",    color: "#fdd835", borderColor: "#f9a825", textColor: "#333" },
-  ];
-
-  // Chicago district cluster centers
-  const clusterCenters = [
-    [41.78, -87.62], [41.80, -87.66], [41.82, -87.70], [41.84, -87.68],
-    [41.86, -87.64], [41.88, -87.62], [41.90, -87.66], [41.85, -87.72],
-    [41.79, -87.74], [41.77, -87.68], [41.92, -87.70], [41.87, -87.60],
-    [41.83, -87.63], [41.75, -87.65], [41.73, -87.63], [41.71, -87.65],
-    [41.69, -87.65], [41.94, -87.69], [41.96, -87.67], [41.74, -87.70],
-  ];
-
-  clusterCenters.forEach((center, ci) => {
-    types.forEach(({ category, color, borderColor, textColor }) => {
-      const count = Math.floor(Math.random() * 490) + 2;
-      incidents.push({
-        id: `${ci}-${category}`,
-        lat: center[0] + (Math.random() - 0.5) * 0.012,
-        lng: center[1] + (Math.random() - 0.5) * 0.012,
-        category,
-        color,
-        borderColor,
-        textColor,
-        count,
-      });
-    });
-  });
-
-  return incidents;
-}
-
-const MOCK_INCIDENTS = generateMockIncidents();
+// Realistic mock crime cluster data matching Chicago police district locations
+const MOCK_INCIDENTS = [
+  // District 1 – Central
+  { id: "1-p", lat: 41.882, lng: -87.628, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 547 },
+  { id: "1-v", lat: 41.886, lng: -87.635, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 19 },
+  { id: "1-o", lat: 41.879, lng: -87.622, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 169 },
+  // District 2 – Wentworth
+  { id: "2-p", lat: 41.832, lng: -87.625, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 238 },
+  { id: "2-v", lat: 41.828, lng: -87.619, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 97 },
+  { id: "2-o", lat: 41.835, lng: -87.632, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 133 },
+  // District 3 – Grand Crossing
+  { id: "3-p", lat: 41.779, lng: -87.605, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 315 },
+  { id: "3-v", lat: 41.775, lng: -87.612, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 151 },
+  { id: "3-o", lat: 41.782, lng: -87.598, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 105 },
+  // District 4 – South Chicago
+  { id: "4-p", lat: 41.744, lng: -87.562, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 289 },
+  { id: "4-v", lat: 41.739, lng: -87.555, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 52 },
+  { id: "4-o", lat: 41.748, lng: -87.570, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 91 },
+  // District 5 – Calumet
+  { id: "5-p", lat: 41.715, lng: -87.612, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 105 },
+  { id: "5-v", lat: 41.710, lng: -87.618, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 52 },
+  { id: "5-o", lat: 41.720, lng: -87.605, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 36 },
+  // District 6 – Gresham
+  { id: "6-p", lat: 41.762, lng: -87.655, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 282 },
+  { id: "6-v", lat: 41.757, lng: -87.662, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 124 },
+  { id: "6-o", lat: 41.767, lng: -87.648, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 150 },
+  // District 7 – Englewood
+  { id: "7-p", lat: 41.780, lng: -87.647, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 199 },
+  { id: "7-v", lat: 41.775, lng: -87.654, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 165 },
+  { id: "7-o", lat: 41.784, lng: -87.640, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 120 },
+  // District 8 – Chicago Lawn
+  { id: "8-p", lat: 41.764, lng: -87.695, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 375 },
+  { id: "8-v", lat: 41.759, lng: -87.702, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 50 },
+  { id: "8-o", lat: 41.769, lng: -87.688, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 398 },
+  // District 9 – Deering
+  { id: "9-p", lat: 41.808, lng: -87.665, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 97 },
+  { id: "9-v", lat: 41.803, lng: -87.672, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 38 },
+  { id: "9-o", lat: 41.812, lng: -87.658, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 150 },
+  // District 10 – Ogden
+  { id: "10-p", lat: 41.856, lng: -87.715, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 288 },
+  { id: "10-v", lat: 41.852, lng: -87.722, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 12 },
+  { id: "10-o", lat: 41.860, lng: -87.708, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 56 },
+  // District 11 – Harrison
+  { id: "11-p", lat: 41.873, lng: -87.700, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 200 },
+  { id: "11-v", lat: 41.868, lng: -87.707, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 73 },
+  { id: "11-o", lat: 41.878, lng: -87.693, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 132 },
+  // District 12 – Near West
+  { id: "12-p", lat: 41.866, lng: -87.670, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 150 },
+  { id: "12-v", lat: 41.862, lng: -87.676, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 115 },
+  { id: "12-o", lat: 41.870, lng: -87.663, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 88 },
+  // District 14 – Shakespeare
+  { id: "14-p", lat: 41.920, lng: -87.690, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 102 },
+  { id: "14-v", lat: 41.916, lng: -87.696, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 14 },
+  { id: "14-o", lat: 41.924, lng: -87.683, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 64 },
+  // District 15 – Austin
+  { id: "15-p", lat: 41.896, lng: -87.752, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 132 },
+  { id: "15-v", lat: 41.892, lng: -87.758, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 60 },
+  { id: "15-o", lat: 41.900, lng: -87.745, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 38 },
+  // District 16 – Jefferson Park
+  { id: "16-p", lat: 41.970, lng: -87.765, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 41 },
+  { id: "16-v", lat: 41.966, lng: -87.772, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 2 },
+  { id: "16-o", lat: 41.974, lng: -87.758, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 15 },
+  // District 17 – Albany Park
+  { id: "17-p", lat: 41.948, lng: -87.720, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 156 },
+  { id: "17-v", lat: 41.944, lng: -87.727, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 10 },
+  { id: "17-o", lat: 41.952, lng: -87.713, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 128 },
+  // District 18 – Near North
+  { id: "18-p", lat: 41.902, lng: -87.632, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 303 },
+  { id: "18-v", lat: 41.898, lng: -87.639, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 6 },
+  { id: "18-o", lat: 41.906, lng: -87.625, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 215 },
+  // District 19 – Town Hall
+  { id: "19-p", lat: 41.935, lng: -87.655, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 222 },
+  { id: "19-v", lat: 41.931, lng: -87.662, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 7 },
+  { id: "19-o", lat: 41.939, lng: -87.648, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 176 },
+  // District 20 – Lincoln
+  { id: "20-p", lat: 41.958, lng: -87.670, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 88 },
+  { id: "20-v", lat: 41.954, lng: -87.677, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 5 },
+  { id: "20-o", lat: 41.962, lng: -87.663, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 60 },
+  // District 22 – Morgan Park
+  { id: "22-p", lat: 41.700, lng: -87.665, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 92 },
+  { id: "22-v", lat: 41.695, lng: -87.672, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 18 },
+  { id: "22-o", lat: 41.705, lng: -87.658, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 335 },
+  // District 24 – Rogers Park
+  { id: "24-p", lat: 41.995, lng: -87.672, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 159 },
+  { id: "24-v", lat: 41.991, lng: -87.679, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 27 },
+  { id: "24-o", lat: 41.999, lng: -87.665, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 128 },
+  // District 25 – Grand Central
+  { id: "25-p", lat: 41.910, lng: -87.740, category: "property", color: "#29b6f6", borderColor: "#0277bd", textColor: "#fff", count: 459 },
+  { id: "25-v", lat: 41.906, lng: -87.747, category: "violent", color: "#e53935", borderColor: "#b71c1c", textColor: "#fff", count: 8 },
+  { id: "25-o", lat: 41.914, lng: -87.733, category: "other", color: "#fdd835", borderColor: "#f9a825", textColor: "#333", count: 200 },
+];
 
 // ── KPI Bar ──────────────────────────────────────────────────────────────
 
