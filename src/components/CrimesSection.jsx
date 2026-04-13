@@ -676,6 +676,22 @@ function CrimeDashboard() {
         <div className="flex-1 relative" style={{ background: "#f0f0f0" }}>
           <MapContainer center={[41.83, -87.68]} zoom={10} style={{ height: "100%", width: "100%", minHeight: 600 }} zoomControl={false}>
             <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution='&copy; CARTO' />
+
+            {/* District boundaries */}
+            {geoData && geoData.features && geoData.features.map((feature, idx) => (
+              <GeoJSON
+                key={`district-boundary-${idx}`}
+                data={feature.geometry || feature}
+                style={{
+                  color: "#222",
+                  weight: 2,
+                  fillColor: "transparent",
+                  fillOpacity: 0,
+                  opacity: 0.85,
+                }}
+              />
+            ))}
+
             {MOCK_INCIDENTS.map(inc => (
               <Marker key={inc.id} position={[inc.lat, inc.lng]}
                 icon={createClusterIcon({ count: inc.count, color: inc.color, borderColor: inc.borderColor, textColor: inc.textColor })}>
