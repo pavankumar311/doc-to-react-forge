@@ -540,50 +540,204 @@ function CrimeSiteInformation() {
 
 // ── Crime Dashboard ───────────────────────────────────────────────────────
 
+const MOCK_CRIME_INCIDENTS = [
+  { id: 1, type: "LARCENY - THEFT (INDEX)", sub: "THEFT - THEFT FROM MOTOR VEHICLE", date: "4/5/26, 10:29 AM", location: "STREET of 53XX W LELAND AVE", address: "53XX W LELAND AVE", rd: "JK207912", iucr: "0710", beat: "1623", ward: "45", community: "PORTAGE PARK", desc: "THEFT FROM MOTOR VEHICLE", category: "property", color: "#29b6f6" },
+  { id: 2, type: "FRAUD", sub: "DECEPTIVE PRACTICE - CREDIT CARD FRAUD", date: "4/5/26, 10:25 AM", location: "OTHER (SPECIFY) of 4XX W MELROSE ST", address: "4XX W MELROSE ST", rd: "JK206858", iucr: "1150", beat: "1925", ward: "44", community: "LAKE VIEW", desc: "CREDIT CARD FRAUD", category: "other", color: "#fdd835" },
+  { id: 3, type: "LARCENY - THEFT (INDEX)", sub: "THEFT - OVER $500", date: "4/5/26, 10:20 AM", location: "OTHER (SPECIFY) of 1XX W HUBBARD ST", address: "1XX W HUBBARD ST", rd: "JK206841", iucr: "0820", beat: "1834", ward: "42", community: "NEAR NORTH SIDE", desc: "THEFT OVER $500", category: "property", color: "#29b6f6" },
+  { id: 4, type: "AGGRAVATED BATTERY", sub: "BATTERY - AGGRAVATED DOMESTIC", date: "4/5/26, 10:15 AM", location: "APARTMENT of 2XX N PINE AVE", address: "2XX N PINE AVE", rd: "JK206799", iucr: "0486", beat: "1533", ward: "29", community: "AUSTIN", desc: "AGGRAVATED DOMESTIC BATTERY", category: "violent", color: "#e53935" },
+  { id: 5, type: "MOTOR VEHICLE THEFT", sub: "MOTOR VEHICLE THEFT - AUTOMOBILE", date: "4/5/26, 10:10 AM", location: "STREET of 67XX S ARTESIAN AVE", address: "67XX S ARTESIAN AVE", rd: "JK206755", iucr: "0910", beat: "0835", ward: "15", community: "CHICAGO LAWN", desc: "AUTOMOBILE", category: "property", color: "#29b6f6" },
+  { id: 6, type: "ROBBERY", sub: "ROBBERY - ARMED: HANDGUN", date: "4/5/26, 10:05 AM", location: "SIDEWALK of 79XX S HALSTED ST", address: "79XX S HALSTED ST", rd: "JK206701", iucr: "0312", beat: "0621", ward: "21", community: "AUBURN GRESHAM", desc: "ARMED ROBBERY HANDGUN", category: "violent", color: "#e53935" },
+];
+
+const DASHBOARD_FILTERS = [
+  { label: "Police District", value: "All" },
+  { label: "Police Beat", value: "All" },
+  { label: "Ward", value: "All" },
+  { label: "Community", value: "All" },
+  { label: "Crime Types", value: "All Crimes" },
+  { label: "Crime Groups", value: "All" },
+  { label: "Date (backdated 7 days)", value: "Last 2 Weeks" },
+];
+
 function CrimeDashboard() {
+  const [bottomTab, setBottomTab] = useState("Crime Incidents");
+  const [searchText, setSearchText] = useState("");
+
+  const filteredIncidents = useMemo(() =>
+    MOCK_CRIME_INCIDENTS.filter(i =>
+      !searchText || i.type.toLowerCase().includes(searchText.toLowerCase()) || i.address.toLowerCase().includes(searchText.toLowerCase())
+    ), [searchText]);
+
+  const kpi = { total: 8829, violent: 740, property: 3319 };
+
   return (
-    <GscipCard>
-      <div className="p-4">
-        <h3 className="text-lg font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>Crime Dashboard</h3>
-        <p className="text-sm mb-4" style={{ color: "var(--color-text-secondary)" }}>
-          Use this application to view crime by geographies like CPD District, CPD Beat, Ward and Community Area. Visualize how those polygons overlap. Includes interactive graphs like time of day &amp; day of week.
-        </p>
-        <div className="grid grid-cols-2 gap-6">
-          <div className="rounded-lg overflow-hidden" style={{ height: 360, border: "1px solid var(--color-border)" }}>
-            <MapContainer center={[41.83, -87.72]} zoom={10} style={{ height: "100%", width: "100%" }} zoomControl={false}>
-              <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-            </MapContainer>
+    <div>
+      {/* Top filter bar */}
+      <div className="flex items-center gap-0 mb-4 rounded-t-lg overflow-hidden" style={{ border: "1px solid var(--color-border)", background: "var(--color-bg-card)" }}>
+        {DASHBOARD_FILTERS.map((f, i) => (
+          <div key={f.label} className="flex-1 px-3 py-2.5 text-center" style={{ borderRight: i < DASHBOARD_FILTERS.length - 1 ? "1px solid var(--color-border)" : "none" }}>
+            <div className="text-[11px] font-semibold" style={{ color: "var(--color-text-primary)" }}>{f.label}</div>
+            <div className="text-[11px]" style={{ color: "var(--color-cobalt)" }}>{f.value}</div>
           </div>
-          <div className="rounded-lg p-4" style={{ background: "var(--color-bg-surface)", border: "1px solid var(--color-border)" }}>
-            <h4 className="text-sm font-semibold mb-3" style={{ color: "var(--color-text-primary)" }}>Legend</h4>
-            <div className="space-y-2 mb-4">
-              <p className="text-xs font-semibold" style={{ color: "var(--color-text-secondary)" }}>Property Crime (Index)</p>
+        ))}
+      </div>
+
+      {/* Three-column layout */}
+      <div className="flex gap-0" style={{ minHeight: 600, border: "1px solid var(--color-border)", borderRadius: 8, overflow: "hidden" }}>
+        {/* LEFT: Crime & Strategic Plans */}
+        <div className="flex flex-col" style={{ width: 340, flexShrink: 0, borderRight: "1px solid var(--color-border)", background: "var(--color-bg-card)" }}>
+          {/* Header */}
+          <div className="px-4 pt-4 pb-2">
+            <h3 className="text-sm font-bold" style={{ color: "var(--color-text-primary)" }}>Crime and Strategic Plans</h3>
+          </div>
+
+          {/* KPI row */}
+          <div className="grid grid-cols-3 gap-0 mx-3 mb-3 rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+            {[
+              { label: "Total Crime", value: kpi.total },
+              { label: "Violent Crime", value: kpi.violent },
+              { label: "Property Crime", value: kpi.property },
+            ].map((c, i) => (
+              <div key={c.label} className="text-center py-3 px-2" style={{ borderRight: i < 2 ? "1px solid var(--color-border)" : "none" }}>
+                <div className="text-[10px] font-semibold" style={{ color: "var(--color-text-secondary)" }}>{c.label}</div>
+                <div className="text-xl font-light mt-0.5" style={{ color: "var(--color-cobalt)" }}>{c.value.toLocaleString()}</div>
+                <div className="text-[9px]" style={{ color: "var(--color-text-muted)" }}>In visible map extent</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Crime Incidents header */}
+          <div className="text-center mb-1">
+            <span className="text-sm font-bold" style={{ color: "var(--color-cobalt)" }}>Crime Incidents</span>
+            <div className="text-[10px]" style={{ color: "#ef4444" }}>Most recent data is from 7 days before yesterday</div>
+          </div>
+
+          {/* Search */}
+          <div className="px-3 mb-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded" style={{ border: "1px solid var(--color-border)", background: "var(--color-bg-surface)" }}>
+              <Search size={13} style={{ color: "var(--color-text-muted)" }} />
+              <input type="text" placeholder="Search..." value={searchText} onChange={e => setSearchText(e.target.value)}
+                className="flex-1 text-xs bg-transparent outline-none" style={{ color: "var(--color-text-primary)" }} />
+            </div>
+          </div>
+
+          {/* Incident list */}
+          <div className="flex-1 overflow-y-auto px-3 pb-2" style={{ maxHeight: 380 }}>
+            {filteredIncidents.map(inc => (
+              <div key={inc.id} className="mb-3 pb-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
+                <div className="flex items-start gap-2">
+                  <div className="mt-1 w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center" style={{ background: inc.color }}>
+                    <span className="text-white text-[10px] font-bold">{inc.category === "violent" ? "!" : inc.category === "property" ? "—" : "●"}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-bold" style={{ color: "var(--color-text-primary)" }}>{inc.type}</div>
+                    <div className="text-[10px]" style={{ color: "var(--color-text-secondary)" }}>{inc.sub}</div>
+                    <div className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>{inc.date} {inc.location}</div>
+                    <div className="mt-1.5 text-[10px]" style={{ color: "var(--color-text-secondary)" }}>
+                      <div>📍 Address: <b>{inc.address}</b></div>
+                      <div>📅 Date of Occurrence: {inc.date}</div>
+                    </div>
+                    <div className="mt-1 text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+                      Description: {inc.desc}<br />
+                      RD <b>{inc.rd}</b> | IUCR {inc.iucr}<br />
+                      Beat {inc.beat} | Ward {inc.ward} | Community <b>{inc.community}</b>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Bottom tabs */}
+          <div className="flex" style={{ borderTop: "1px solid var(--color-border)" }}>
+            {["Crime Incidents", "Strategic Plans"].map(t => (
+              <button key={t} onClick={() => setBottomTab(t)}
+                className="flex-1 py-2 text-xs font-medium text-center"
+                style={{
+                  color: bottomTab === t ? "var(--color-cobalt)" : "var(--color-text-secondary)",
+                  background: bottomTab === t ? "var(--color-bg-card)" : "var(--color-bg-surface)",
+                  borderBottom: bottomTab === t ? "2px solid var(--color-cobalt)" : "2px solid transparent",
+                }}>
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* CENTER: Map */}
+        <div className="flex-1 relative" style={{ background: "#f0f0f0" }}>
+          <MapContainer center={[41.83, -87.68]} zoom={10} style={{ height: "100%", width: "100%", minHeight: 600 }} zoomControl={false}>
+            <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution='&copy; CARTO' />
+            {MOCK_INCIDENTS.map(inc => (
+              <Marker key={inc.id} position={[inc.lat, inc.lng]}
+                icon={createClusterIcon({ count: inc.count, color: inc.color, borderColor: inc.borderColor, textColor: inc.textColor })}>
+                <Popup>
+                  <div style={{ fontSize: 12, padding: 4 }}>
+                    <div style={{ fontWeight: 700 }}>Cluster: {inc.category}</div>
+                    <div>Features: {inc.count}</div>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
+
+          {/* Map bottom tabs */}
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[500] flex gap-1 rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)", background: "var(--color-bg-card)" }}>
+            {["Crime Map", "Crime Statistics"].map(t => (
+              <button key={t} className="px-4 py-1.5 text-xs font-medium"
+                style={{ color: t === "Crime Map" ? "var(--color-cobalt)" : "var(--color-text-secondary)", background: t === "Crime Map" ? "var(--color-bg-card)" : "var(--color-bg-surface)" }}>
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* RIGHT: Legend */}
+        <div className="flex flex-col overflow-y-auto" style={{ width: 220, flexShrink: 0, borderLeft: "1px solid var(--color-border)", background: "var(--color-bg-card)", padding: 12 }}>
+          <div className="text-xs font-bold mb-2" style={{ color: "var(--color-text-primary)" }}>Crime</div>
+
+          {Object.entries(CRIME_TYPES).map(([key, group]) => (
+            <div key={key} className="mb-3">
+              <div className="text-[11px] font-semibold mb-1" style={{ color: "var(--color-text-secondary)" }}>{group.label}</div>
+              <div className="space-y-1">
+                {group.items.map(item => (
+                  <div key={item.code} className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
+                    <span className="text-[11px]" style={{ color: "var(--color-text-primary)" }}>{item.code} - {item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <div className="mt-2 pt-2" style={{ borderTop: "1px solid var(--color-border)" }}>
+            <div className="text-[11px] font-semibold mb-2" style={{ color: "var(--color-text-secondary)" }}>Number of features</div>
+            <div className="space-y-1.5">
               {[
-                { label: "05 - Burglary", color: "#1565C0" },
-                { label: "06 - Larceny/Theft", color: "#42A5F5" },
-                { label: "07 - Motor Vehicle Theft", color: "#7E57C2" },
-                { label: "09 - Arson", color: "#EF5350" },
-              ].map(item => (
-                <div key={item.label} className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-xs" style={{ color: "var(--color-text-primary)" }}>{item.label}</span>
+                { label: "> 14,012", size: 28 },
+                { label: "10,000", size: 24 },
+                { label: "7,000", size: 20 },
+                { label: "3,000", size: 14 },
+                { label: "< 2", size: 8 },
+              ].map(b => (
+                <div key={b.label} className="flex items-center gap-2">
+                  <div className="rounded-full flex-shrink-0" style={{ width: b.size, height: b.size, backgroundColor: "#C62828", opacity: 0.8 }} />
+                  <span className="text-[11px]" style={{ color: "var(--color-text-primary)" }}>{b.label}</span>
                 </div>
               ))}
             </div>
-            <div className="space-y-2">
-              <p className="text-xs font-semibold" style={{ color: "var(--color-text-secondary)" }}>Number of Features</p>
-              {[55, 40, 30].map(n => (
-                <div key={n} className="flex items-center gap-2">
-                  <div className="rounded-full flex items-center justify-center text-white text-[10px] font-bold"
-                    style={{ width: 12 + n * 0.3, height: 12 + n * 0.3, backgroundColor: "#C62828" }}>{n}</div>
-                  <span className="text-xs" style={{ color: "var(--color-text-primary)" }}>{n}</span>
-                </div>
-              ))}
+          </div>
+
+          <div className="mt-3 pt-2" style={{ borderTop: "1px solid var(--color-border)" }}>
+            <div className="text-xs font-bold mb-1" style={{ color: "var(--color-text-primary)" }}>Police Beats</div>
+            <div className="flex items-center gap-2">
+              <Layers size={14} style={{ color: "var(--color-text-muted)" }} />
+              <span className="text-[11px]" style={{ color: "var(--color-text-muted)" }}>Overlay</span>
             </div>
           </div>
         </div>
       </div>
-    </GscipCard>
+    </div>
   );
 }
 
