@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import GscipCard from "./GscipCard";
-import { MapContainer, TileLayer, Popup, Marker } from "react-leaflet";
+import { MapContainer, TileLayer, GeoJSON, Popup, Marker } from "react-leaflet";
 import L from "leaflet";
 import { Search, Calendar, Filter, Layers, Map as MapIcon, ChevronDown, ChevronUp } from "lucide-react";
 
