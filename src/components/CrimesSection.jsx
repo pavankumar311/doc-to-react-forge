@@ -562,6 +562,14 @@ const DASHBOARD_FILTERS = [
 function CrimeDashboard() {
   const [bottomTab, setBottomTab] = useState("Crime Incidents");
   const [searchText, setSearchText] = useState("");
+  const [geoData, setGeoData] = useState(null);
+
+  useEffect(() => {
+    fetch("/chicago_districts.geojson")
+      .then(r => r.json())
+      .then(data => setGeoData(data))
+      .catch(() => {});
+  }, []);
 
   const filteredIncidents = useMemo(() =>
     MOCK_CRIME_INCIDENTS.filter(i =>
