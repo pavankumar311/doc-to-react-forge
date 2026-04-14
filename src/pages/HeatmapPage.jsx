@@ -12,7 +12,7 @@ import { AUTH_TOKEN } from "../services/api";
 import { Calendar } from "../components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 
-const BASE_URL = "http://localhost:9002";
+const BASE_URL = "http://localhost:9000";
 
 const CATEGORY_COLORS = {
   violent: "#ef4444",
@@ -470,8 +470,8 @@ export default function Heatmap() {
                 key={type.crime_type_id}
                 onClick={() => toggleCrimeType(type.crime_type_id)}
                 className={`px-3.5 py-1.5 rounded-full text-[10px] font-bold tracking-tight transition-all border ${active
-                    ? "bg-azure/10 border-azure text-azure shadow-[0_0_15px_rgba(33,150,243,0.2)] scale-[1.02]"
-                    : "border-border text-muted-foreground/80 hover:border-muted-foreground/90 hover:bg-accent/5"
+                  ? "bg-azure/10 border-azure text-azure shadow-[0_0_15px_rgba(33,150,243,0.2)] scale-[1.02]"
+                  : "border-border text-muted-foreground/80 hover:border-muted-foreground/90 hover:bg-accent/5"
                   }`}
               >
                 {type.primary_type}

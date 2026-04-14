@@ -34,10 +34,10 @@ import {
 // ── Configuration ──────────────────────────────────────────────────────
 // const API_BASE_URL = "https://api.gscip.gov/v1";
 // const API_KEY = process.env.REACT_APP_GSCIP_API_KEY || "";
-const DASHBOARD_API_BASE = "http://localhost:9002/api/v1/dashboard";
-const REPORTS_API_BASE = "http://localhost:9002/api/v1/reports";
+const DASHBOARD_API_BASE = "http://localhost:9000/api/v1/dashboard";
+const REPORTS_API_BASE = "http://localhost:9000/api/v1/reports";
 export const AUTH_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NTExNzU4NCwgImV4cCI6IDE3NzUyMDM5ODR9.KJbTp-nPCPKqdwPeQvynYfoiDCJjMwvYA509ZJ02aDY";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NjE0NTY1NiwgImV4cCI6IDE3NzYyMzIwNTZ9.hpczogU1ZdaGFVvKCLl61IoywITeP6_lg_hMpOS-Srk";
 
 function normalizeDistrictId(value) {
   if (value == null) return "";
@@ -221,7 +221,7 @@ export async function fetchWeeklyTrend({ filters, districtIdByName } = {}) {
     if (!res.ok) throw new Error(`Weekly trend fetch failed: ${res.status}`);
     const payload = await res.json();
     const chart = payload?.chart_data ?? [];
-    
+
     // Map backend series to { day, count } expected by the Dashboard widget
     return chart.slice(-7).map((row) => ({
       day: row?.label ?? row?.date?.slice?.(0, 10) ?? "",
@@ -483,11 +483,21 @@ export async function fetchPoliceStations() {
 }
 
 export async function fetchPoliceBeats() {
-  const res = await fetch(`${DASHBOARD_API_BASE}/map/police-beats`, {
-    headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
-  });
-  if (!res.ok) throw new Error("Police beats fetch failed");
-  return await res.json();
+  try {
+    const res = await fetch(`${DASHBOARD_API_BASE}/geospatial/boundaries?level=beat`, {
+      headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+    });
+    if (!res.ok) throw new Error(`Police beats fetch failed: ${res.status}`);
+    const data = await res.json();
+    // Backend returns: { level, features: [{ id, label, boundary }] }
+    return (data.features ?? data).map((f) => ({
+      beat_num: f.id ?? f.properties?.id ?? f.beat_num,
+      boundary: f.boundary ?? f.geometry,
+    }));
+  } catch (err) {
+    console.error("fetchPoliceBeats failed:", err);
+    return [];
+  }
 }
 
 export async function fetchPrecincts() {
@@ -496,4 +506,182 @@ export async function fetchPrecincts() {
   });
   if (!res.ok) throw new Error("Precincts fetch failed");
   return await res.json();
+}
+
+// ── Summary Maps ───────────────────────────────────────────────────────
+
+/**
+ * Fetches choropleth ranking data for a specific geographic level.
+ * @param {"ward"|"district"|"beat"} level
+ * @param {string} dateFrom  ISO date string, e.g. "2024-01-01"
+ * @param {string} dateTo    ISO date string, e.g. "2024-12-31"
+ */
+export async function fetchGeospatialSummary({ level, dateFrom, dateTo, wardIds, districtIds, beatIds, crimeTypeIds } = {}) {
+  try {
+    const params = new URLSearchParams({ level });
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
+    if (wardIds?.length) params.set("ward_ids", wardIds.join(","));
+    if (districtIds?.length) params.set("district_ids", districtIds.join(","));
+    if (beatIds?.length) params.set("beat_ids", beatIds.join(","));
+    if (crimeTypeIds?.length) params.set("crime_type_ids", crimeTypeIds.join(","));
+
+    const res = await fetch(`${DASHBOARD_API_BASE}/geospatial/summary?${params}`, {
+      headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+    });
+    if (!res.ok) throw new Error(`Geospatial summary fetch failed: ${res.status}`);
+    return await res.json(); // { level, date_from, date_to, total_incidents, items: [...] }
+  } catch (err) {
+    console.error("fetchGeospatialSummary failed:", err);
+    return { level, total_incidents: 0, items: [] };
+  }
+}
+
+/**
+ * Fetches summary KPI metrics (total incidents, arrest rate, etc.).
+ * @param {{ dateFrom, dateTo, wardIds?, districtIds?, crimeTypeIds? }} params
+ */
+export async function fetchSummaryKPIs({ dateFrom, dateTo, wardIds, districtIds, beatIds, crimeTypeIds } = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
+    if (wardIds?.length) params.set("ward_ids", wardIds.join(","));
+    if (districtIds?.length) params.set("district_ids", districtIds.join(","));
+    if (beatIds?.length) params.set("beat_ids", beatIds.join(","));
+    if (crimeTypeIds?.length) params.set("crime_type_ids", crimeTypeIds.join(","));
+    const res = await fetch(`${DASHBOARD_API_BASE}/summary?${params}`, {
+      headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+    });
+    if (!res.ok) throw new Error(`Summary KPI fetch failed: ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error("fetchSummaryKPIs failed:", err);
+    return { total_incidents: 0, arrest_count: 0, arrest_rate_pct: 0, domestic_count: 0, domestic_rate_pct: 0 };
+  }
+}
+
+/**
+ * Fetches incidents grouped by date for the trend line chart.
+ * @param {{ dateFrom, dateTo, wardIds?, districtIds?, crimeTypeIds? }} params
+ */
+export async function fetchIncidentsByDate({ dateFrom, dateTo, wardIds, districtIds, beatIds, crimeTypeIds } = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
+    if (wardIds?.length) params.set("ward_ids", wardIds.join(","));
+    if (districtIds?.length) params.set("district_ids", districtIds.join(","));
+    if (beatIds?.length) params.set("beat_ids", beatIds.join(","));
+    if (crimeTypeIds?.length) params.set("crime_type_ids", crimeTypeIds.join(","));
+    const res = await fetch(`${DASHBOARD_API_BASE}/incidents/by-date?${params}`, {
+      headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+    });
+    if (!res.ok) throw new Error(`Incidents by-date fetch failed: ${res.status}`);
+    const payload = await res.json(); // { window_type, data: [{ label, date, crime_count }] }
+    return (payload.data ?? []).map((row) => ({ date: row.label, count: row.crime_count }));
+  } catch (err) {
+    console.error("fetchIncidentsByDate failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Fetches incidents broken down by crime type.
+ * @param {{ dateFrom, dateTo, wardIds?, districtIds?, crimeTypeIds? }} params
+ */
+export async function fetchIncidentsByCrimeType({ dateFrom, dateTo, wardIds, districtIds, beatIds, crimeTypeIds } = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
+    if (wardIds?.length) params.set("ward_ids", wardIds.join(","));
+    if (districtIds?.length) params.set("district_ids", districtIds.join(","));
+    if (beatIds?.length) params.set("beat_ids", beatIds.join(","));
+    if (crimeTypeIds?.length) params.set("crime_type_ids", crimeTypeIds.join(","));
+    const res = await fetch(`${DASHBOARD_API_BASE}/incidents/by-crime-type?${params}`, {
+      headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+    });
+    if (!res.ok) throw new Error(`Incidents by-crime-type fetch failed: ${res.status}`);
+    const payload = await res.json(); // { total, items: [{ crime_type_id, primary_type, category, crime_count, pct_of_total }] }
+    const CATEGORY_COLORS = {
+      violent: "#ef4444",
+      property: "#f97316",
+      quality: "#eab308",
+      other: "#6b7280",
+    };
+    return (payload.items ?? []).map((item) => ({
+      name: item.primary_type,
+      count: item.crime_count,
+      category: item.category,
+      color: CATEGORY_COLORS[item.category] ?? CATEGORY_COLORS.other,
+      pct: item.pct_of_total,
+    }));
+  } catch (err) {
+    console.error("fetchIncidentsByCrimeType failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Fetches individual incident points for the map.
+ * @param {{ dateFrom, dateTo, wardIds?, districtIds?, crimeTypeIds?, limit? }} params
+ */
+export async function fetchMapIncidents({ dateFrom, dateTo, wardIds, districtIds, beatIds, crimeTypeIds, limit = 500 } = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
+    if (wardIds?.length) params.set("ward_ids", wardIds.join(","));
+    if (districtIds?.length) params.set("district_ids", districtIds.join(","));
+    if (beatIds?.length) params.set("beat_ids", beatIds.join(","));
+    if (crimeTypeIds?.length) params.set("crime_type_ids", crimeTypeIds.join(","));
+    params.set("limit", String(limit));
+    const res = await fetch(`${DASHBOARD_API_BASE}/map/incidents?${params}`, {
+      headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+    });
+    if (!res.ok) throw new Error(`Map incidents fetch failed: ${res.status}`);
+    return await res.json(); // array of incident objects
+  } catch (err) {
+    console.error("fetchMapIncidents failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Fetches ward boundary GeoJSON polygons.
+ */
+export async function fetchWardBoundaries() {
+  try {
+    // Uses /geospatial/boundaries?level=ward which aggregates from precincts collection
+    const res = await fetch(`${DASHBOARD_API_BASE}/geospatial/boundaries?level=ward`, {
+      headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+    });
+    if (!res.ok) throw new Error(`Ward boundaries fetch failed: ${res.status}`);
+    const data = await res.json();
+    // Backend returns: { level, features: [{ id, label, boundary }] }
+    return (data.features ?? data).map((f) => ({
+      ward_id: f.id ?? f.properties?.id ?? f.ward_id,
+      boundary: f.boundary ?? f.geometry,
+    }));
+  } catch (err) {
+    console.error("fetchWardBoundaries failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Fetches district boundary GeoJSON polygons (with include_boundary=true).
+ */
+export async function fetchDistrictBoundaries() {
+  try {
+    const res = await fetch(`${DASHBOARD_API_BASE}/districts?include_boundary=true`, {
+      headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+    });
+    if (!res.ok) throw new Error(`District boundaries fetch failed: ${res.status}`);
+    return await res.json(); // array of { district_id, district_name, boundary, ... }
+  } catch (err) {
+    console.error("fetchDistrictBoundaries failed:", err);
+    return [];
+  }
 }

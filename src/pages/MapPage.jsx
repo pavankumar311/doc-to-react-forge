@@ -11,7 +11,7 @@ import { HeatmapSkeleton } from "../components/Skeletons";
 import { useFilters } from "../contexts/FilterContext";
 import { AUTH_TOKEN, fetchPoliceStations, fetchPoliceBeats, fetchPrecincts } from "../services/api";
 
-const BASE_URL = "http://localhost:9002";
+const BASE_URL = "http://localhost:9000";
 const THEMATIC_COLORS = ["#fde68a", "#fbbf24", "#f59e0b", "#f97316", "#ef4444"];
 
 /* ── Inline Component: DateInput (Styled like Home Page) ──────────────── */
@@ -104,9 +104,9 @@ const buildBins = (values, count) => {
   for (let i = 0; i < count; i += 1) {
     const minIdx = Math.floor((i / count) * lastIdx);
     const maxIdx = Math.floor(((i + 1) / count) * lastIdx);
-    bins.push({ 
-      min: sorted[minIdx] || 0, 
-      max: sorted[maxIdx] || (sorted[minIdx] + 1) 
+    bins.push({
+      min: sorted[minIdx] || 0,
+      max: sorted[maxIdx] || (sorted[minIdx] + 1)
     });
   }
   return bins;

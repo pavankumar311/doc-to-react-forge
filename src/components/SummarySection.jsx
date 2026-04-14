@@ -1,99 +1,80 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
-import { Filter, MapPin, Home, Copy, SquareStack, ZoomIn, ZoomOut, Maximize, Minimize } from "lucide-react";
+import { Filter, MapPin, Home, Copy, SquareStack, ZoomIn, ZoomOut, Maximize, Minimize, CircleDot } from "lucide-react";
 import GscipCard from "./GscipCard";
-import { MapContainer, TileLayer, GeoJSON, Marker, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, GeoJSON, CircleMarker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
-import { AUTH_TOKEN } from "../services/api";
+import {
+  AUTH_TOKEN,
+  fetchGeospatialSummary,
+  fetchSummaryKPIs,
+  fetchIncidentsByDate,
+  fetchIncidentsByCrimeType,
+  fetchWardBoundaries,
+  fetchDistrictBoundaries,
+  fetchPoliceBeats,
+} from "../services/api";
 
-const MOCK_CRIME_TYPES = [
-  { name: "Aggravated Battery", count: 7031 },
-  { name: "Aggravated Assault", count: 6406 },
-  { name: "Robbery", count: 5383 },
-  { name: "Criminal Sexual Assault", count: 1761 },
-  { name: "Homicide", count: 398 },
-];
+// ── Time frame helpers ──────────────────────────────────────────────────
+const TIME_FRAMES = ["Last 7 days", "Last 30 days", "Last 90 days", "Last 365 days"];
 
-const MOCK_DISTRICTS = [
-  { name: "001", count: 807 },
-  { name: "002", count: 950 },
-  { name: "003", count: 1531 },
-  { name: "004", count: 1524 },
-  { name: "005", count: 1100 },
-  { name: "006", count: 1540 },
-  { name: "007", count: 1285 },
-  { name: "008", count: 1241 },
-  { name: "009", count: 1164 },
-  { name: "010", count: 1031 },
-  { name: "011", count: 1537 },
-  { name: "012", count: 1122 },
-  { name: "014", count: 680 },
-  { name: "015", count: 1051 },
-  { name: "016", count: 450 },
-  { name: "017", count: 530 },
-  { name: "018", count: 870 },
-  { name: "019", count: 750 },
-  { name: "020", count: 490 },
-  { name: "022", count: 410 },
-  { name: "024", count: 500 },
-  { name: "025", count: 890 },
-];
+function timeFrameToDates(tf) {
+  const to = new Date();
+  const from = new Date();
+  if (tf === "Last 7 days") from.setDate(to.getDate() - 7);
+  else if (tf === "Last 30 days") from.setDate(to.getDate() - 30);
+  else if (tf === "Last 90 days") from.setDate(to.getDate() - 90);
+  else from.setFullYear(to.getFullYear() - 1);
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  return { dateFrom: fmt(from), dateTo: fmt(to) };
+}
 
-const MOCK_BEATS = [
-  { name: "0111", count: 312 },
-  { name: "0112", count: 278 },
-  { name: "0231", count: 431 },
-  { name: "0232", count: 395 },
-  { name: "0311", count: 520 },
-  { name: "0412", count: 488 },
-  { name: "0511", count: 370 },
-  { name: "0611", count: 560 },
-  { name: "0712", count: 415 },
-  { name: "0813", count: 339 },
-  { name: "0911", count: 402 },
-  { name: "1011", count: 295 },
-  { name: "1112", count: 511 },
-  { name: "1213", count: 348 },
-];
-
-const MOCK_WARDS = [
-  { name: "Ward 1", count: 620 },
-  { name: "Ward 2", count: 710 },
-  { name: "Ward 3", count: 540 },
-  { name: "Ward 4", count: 890 },
-  { name: "Ward 5", count: 960 },
-  { name: "Ward 6", count: 1020 },
-  { name: "Ward 7", count: 830 },
-  { name: "Ward 8", count: 750 },
-  { name: "Ward 9", count: 680 },
-  { name: "Ward 10", count: 590 },
-  { name: "Ward 11", count: 870 },
-  { name: "Ward 12", count: 490 },
-];
-
-const TAB_DATA = {
-  "Police Districts": { data: MOCK_DISTRICTS, chartTitle: "Incidents by District", filterLabel: "District" },
-  "Police Beats":    { data: MOCK_BEATS,     chartTitle: "Incidents by Beats",    filterLabel: "Beat" },
-  "Wards":           { data: MOCK_WARDS,     chartTitle: "Incidents by Wards",    filterLabel: "Ward" },
-  "Community Areas": { data: MOCK_DISTRICTS, chartTitle: "Incidents by District", filterLabel: "Community Area" },
+// Tab → API level mapping
+const TAB_LEVEL = {
+  "Police Districts": "district",
+  "Police Beats": "beat",
+  Wards: "ward",
+  "Community Areas": "district", // fallback to district
 };
 
-const MOCK_DATE_DATA = [
-  { date: "2025-04-01", count: 390 },
-  { date: "2025-04-08", count: 420 },
-  { date: "2025-04-15", count: 435 },
-  { date: "2025-04-22", count: 460 },
-  { date: "2025-04-29", count: 480 },
-  { date: "2025-05-06", count: 520 },
-  { date: "2025-05-13", count: 540 },
-  { date: "2025-05-20", count: 500 },
-  { date: "2025-05-27", count: 470 },
-  { date: "2025-06-03", count: 440 },
-  { date: "2025-06-10", count: 430 },
-  { date: "2025-06-17", count: 405 },
-];
+const TAB_LABELS = {
+  "Police Districts": { chartTitle: "Incidents by District", filterLabel: "District" },
+  "Police Beats": { chartTitle: "Incidents by Beat", filterLabel: "Beat" },
+  Wards: { chartTitle: "Incidents by Ward", filterLabel: "Ward" },
+  "Community Areas": { chartTitle: "Incidents by District", filterLabel: "Community Area" },
+};
 
-const TIME_FRAMES = ["Last 30 days", "Last 90 days", "Last 365 days"];
+// ── Choropleth bins ─────────────────────────────────────────────────────
+function buildBins(items) {
+  if (!items || items.length === 0) return [];
+  const counts = items.map((i) => i.crime_count).sort((a, b) => a - b);
+  const max = counts[counts.length - 1];
+  const min = counts[0];
+  const range = max - min || 1;
+  const step = range / 5;
+  const COLORS = ["#faf1d2", "#b9d4c6", "#77a9be", "#547e9b", "#2d4464"];
+  return COLORS.map((color, i) => ({
+    min: min + step * i,
+    max: i === 4 ? Infinity : min + step * (i + 1),
+    color,
+  }));
+}
+
+function getBinColor(count, bins) {
+  if (!bins || bins.length === 0) return "#b9d4c6";
+  for (const bin of [...bins].reverse()) {
+    if (count >= bin.min) return bin.color;
+  }
+  return bins[0].color;
+}
+
+// ── Category colors ─────────────────────────────────────────────────────
+const CATEGORY_COLORS = {
+  violent: "#ef4444",
+  property: "#f97316",
+  quality: "#eab308",
+  other: "#6b7280",
+};
 
 const BAR_COLOR = "#7A8A9E";
 
@@ -104,6 +85,8 @@ const tooltipStyle = {
   fontSize: 12,
   color: "var(--color-text-primary)",
 };
+
+// ── Sub-components ──────────────────────────────────────────────────────
 
 function FiltersPanel({ selectedTimeFrame, onTimeFrameChange, crimeTypes, selectedCrimes, onToggleCrime, onApply, onReset }) {
   return (
@@ -142,7 +125,7 @@ function FiltersPanel({ selectedTimeFrame, onTimeFrameChange, crimeTypes, select
             Reset
           </button>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
           {crimeTypes.map((ct) => (
             <label key={ct.name} className="flex items-center justify-between cursor-pointer group">
               <div className="flex items-center gap-2">
@@ -174,90 +157,108 @@ function FiltersPanel({ selectedTimeFrame, onTimeFrameChange, crimeTypes, select
   );
 }
 
-function CrimeTypeChart({ data }) {
+function CrimeTypeChart({ data, loading }) {
   return (
     <GscipCard>
       <div className="flex items-center gap-2 mb-4">
         <span className="text-lg">⚙</span>
         <h3 className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>Incidents by Crime Type</h3>
       </div>
-      <ResponsiveContainer width="100%" height={280}>
-        <BarChart data={data} layout="vertical" margin={{ left: 10, right: 50, top: 5, bottom: 5 }}>
-          <XAxis type="number" tick={{ fontSize: 11, fill: "var(--color-text-muted)" }} axisLine={{ stroke: "var(--color-border)" }} tickLine={false} />
-          <YAxis
-            type="category"
-            dataKey="name"
-            width={120}
-            tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
-            axisLine={false}
-            tickLine={false}
-            tickFormatter={(v) => v.length > 15 ? v.slice(0, 14) + "…" : v}
-          />
-          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
-          <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={28} label={{ position: "right", fontSize: 11, fill: "var(--color-text-primary)", formatter: (v) => v.toLocaleString() }}>
-            {data.map((_, i) => (
-              <Cell key={i} fill={BAR_COLOR} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+      {loading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-sm" style={{ color: "var(--color-text-muted)" }}>Loading…</div>
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={400}>
+          <BarChart data={data} layout="vertical" margin={{ left: 10, right: 50, top: 5, bottom: 5 }}>
+            <XAxis type="number" tick={{ fontSize: 11, fill: "var(--color-text-muted)" }} axisLine={{ stroke: "var(--color-border)" }} tickLine={false} />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={130}
+              tick={{ fontSize: 10, fill: "var(--color-text-secondary)" }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(v) => v.length > 18 ? v.slice(0, 17) + "…" : v}
+            />
+            <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+            <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={22} label={{ position: "right", fontSize: 11, fill: "var(--color-text-primary)", formatter: (v) => v.toLocaleString() }}>
+              {data.map((entry, i) => (
+                <Cell key={i} fill={entry.color || BAR_COLOR} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )}
       <p className="text-center text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>Reported Incidents</p>
     </GscipCard>
   );
 }
 
-function DistrictChart({ data, title }) {
+function GeoChart({ data, title, loading }) {
   return (
     <GscipCard>
       <div className="flex items-center gap-2 mb-4">
         <MapPin size={18} style={{ color: "var(--color-text-secondary)" }} />
         <h3 className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>{title}</h3>
       </div>
-      <ResponsiveContainer width="100%" height={280}>
-        <BarChart data={data} layout="vertical" margin={{ left: 10, right: 50, top: 5, bottom: 5 }}>
-          <XAxis type="number" tick={{ fontSize: 11, fill: "var(--color-text-muted)" }} axisLine={{ stroke: "var(--color-border)" }} tickLine={false} />
-          <YAxis
-            type="category"
-            dataKey="name"
-            width={40}
-            tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
-            axisLine={false}
-            tickLine={false}
-          />
-          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
-          <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={22} label={{ position: "right", fontSize: 11, fill: "var(--color-text-primary)", formatter: (v) => v.toLocaleString() }}>
-            {data.map((_, i) => (
-              <Cell key={i} fill={BAR_COLOR} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+      {loading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-sm" style={{ color: "var(--color-text-muted)" }}>Loading…</div>
+        </div>
+      ) : data.length === 0 ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-sm" style={{ color: "var(--color-text-muted)" }}>No data</div>
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={400}>
+          <BarChart data={data} layout="vertical" margin={{ left: 10, right: 60, top: 5, bottom: 5 }}>
+            <XAxis type="number" tick={{ fontSize: 11, fill: "var(--color-text-muted)" }} axisLine={{ stroke: "var(--color-border)" }} tickLine={false} />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={44}
+              tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(0,0,0,0.04)" }} formatter={(v, n) => [v.toLocaleString(), "Incidents"]} />
+            <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={18} label={{ position: "right", fontSize: 11, fill: "var(--color-text-primary)", formatter: (v) => v.toLocaleString() }}>
+              {data.map((_, i) => (
+                <Cell key={i} fill={BAR_COLOR} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )}
       <p className="text-center text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>Reported Incidents</p>
     </GscipCard>
   );
 }
 
-function DistrictFilterPanel({ districts, selectedDistricts, onToggleDistrict, onApply, onReset, filterLabel, compact }) {
+function GeoFilterPanel({ items, selectedIds, onToggle, onApply, onReset, filterLabel, compact }) {
   return (
     <GscipCard style={compact ? { paddingTop: 12, paddingBottom: 12 } : {}}>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>{filterLabel || "District"}</h3>
+        <h3 className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>{filterLabel || "Area"}</h3>
         <button onClick={onReset} className="text-xs font-medium" style={{ color: "var(--color-azure)" }}>Reset</button>
       </div>
       <div className={`space-y-2 overflow-y-auto pr-2 ${compact ? "max-h-36" : "max-h-80"}`}>
-        {districts.map((district) => (
-          <label key={district.name} className="flex items-center justify-between cursor-pointer group">
+        {items.map((item) => (
+          <label key={item.id} className="flex items-center justify-between cursor-pointer group">
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
-                checked={selectedDistricts.includes(district.name)}
-                onChange={() => onToggleDistrict(district.name)}
+                checked={selectedIds.includes(item.id)}
+                onChange={() => onToggle(item.id)}
                 className="rounded"
                 style={{ accentColor: "var(--color-cobalt)" }}
               />
-              <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>{district.name}</span>
+              <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>{item.name}</span>
             </div>
-            <span className="text-xs font-mono" style={{ color: "var(--color-text-muted)" }}>{district.count.toLocaleString()}</span>
+            <span className="text-xs font-mono" style={{ color: "var(--color-text-muted)" }}>
+              {item.count.toLocaleString()}
+            </span>
           </label>
         ))}
       </div>
@@ -268,63 +269,43 @@ function DistrictFilterPanel({ districts, selectedDistricts, onToggleDistrict, o
       >
         Apply
       </button>
-      {/* {!compact && (
-        <p className="text-[11px] mt-3" style={{ color: "var(--color-text-muted)" }}>
-          Counts do not update with filtering; are for past 365 days.
-        </p>
-      )} */}
     </GscipCard>
   );
 }
 
-function IncidentsByDateChart({ data, chartHeight = 360 }) {
+function IncidentsByDateChart({ data, loading, chartHeight = 360 }) {
   return (
     <GscipCard style={{ height: "100%" }}>
       <div className="flex items-center gap-2 mb-4">
         <span className="text-lg">📅</span>
         <h3 className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>Incidents by Date</h3>
       </div>
-      <ResponsiveContainer width="100%" height={chartHeight}>
-        <LineChart data={data} margin={{ left: 0, right: 20, top: 10, bottom: 10 }}>
-          <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
-          <XAxis dataKey="date" tick={{ fontSize: 11, fill: "var(--color-text-muted)" }} tickLine={false} axisLine={false} />
-          <YAxis tick={{ fontSize: 11, fill: "var(--color-text-muted)" }} axisLine={false} tickLine={false} />
-          <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "rgba(0,0,0,0.12)", strokeWidth: 2 }} />
-          <Line type="monotone" dataKey="count" stroke="#1F2937" strokeWidth={2} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
+      {loading ? (
+        <div className="flex items-center justify-center" style={{ height: chartHeight }}>
+          <div className="text-sm" style={{ color: "var(--color-text-muted)" }}>Loading…</div>
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={chartHeight}>
+          <LineChart data={data} margin={{ left: 0, right: 20, top: 10, bottom: 10 }}>
+            <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+            <XAxis dataKey="date" tick={{ fontSize: 11, fill: "var(--color-text-muted)" }} tickLine={false} axisLine={false} />
+            <YAxis tick={{ fontSize: 11, fill: "var(--color-text-muted)" }} axisLine={false} tickLine={false} />
+            <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "rgba(0,0,0,0.12)", strokeWidth: 2 }} formatter={(v) => [v, "Incidents"]} />
+            <Line type="monotone" dataKey="count" stroke="#1F2937" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
     </GscipCard>
   );
 }
 
-// Thematic Legend colors from the image
-const BINS = [
-  { min: 1284, max: Infinity, label: "> 1,284 - 1,537", color: "#2d4464" }, // dark blue
-  { min: 1049, max: 1284, label: "> 1,049 - 1,284", color: "#547e9b" }, // darker teal
-  { min: 807, max: 1049, label: "> 807 - 1,049", color: "#77a9be" }, // medium teal
-  { min: 587, max: 807, label: "> 587 - 807", color: "#b9d4c6" }, // light teal
-  { min: 0, max: 587, label: "307 - 587", color: "#faf1d2" }, // pale yellow
-];
-
-function getCentroid(boundary) {
-  if (!boundary) return [41.84, -87.63];
-  try {
-    const coords = boundary.type === "Polygon" ? boundary.coordinates[0] : boundary.coordinates[0][0];
-    const lats = coords.map(c => c[1]);
-    const lons = coords.map(c => c[0]);
-    return [lats.reduce((a, b) => a + b, 0) / lats.length, lons.reduce((a, b) => a + b, 0) / lons.length];
-  } catch (e) {
-    return [41.84, -87.63];
-  }
-}
+// ── Map helpers ─────────────────────────────────────────────────────────
 
 function DropShadowPainter() {
   const map = useMap();
   useEffect(() => {
     const pane = map.getPane("overlayPane");
-    if (pane) {
-      pane.style.filter = "drop-shadow(6px 10px 8px rgba(0,0,0,0.5))";
-    }
+    if (pane) pane.style.filter = "drop-shadow(6px 10px 8px rgba(0,0,0,0.5))";
   }, [map]);
   return null;
 }
@@ -332,32 +313,16 @@ function DropShadowPainter() {
 function MapZoomControls({ onZoomIn, onZoomOut, onReset, isFullscreen, onToggleFullscreen }) {
   return (
     <div className="absolute top-4 left-4 z-[500] flex flex-col gap-1.5">
-      <button
-        onClick={onReset}
-        className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500"
-        title="Reset view"
-      >
+      <button onClick={onReset} className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500" title="Reset view">
         <Home size={18} />
       </button>
-      <button
-        onClick={onZoomIn}
-        className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500"
-        title="Zoom in"
-      >
+      <button onClick={onZoomIn} className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500" title="Zoom in">
         <ZoomIn size={18} />
       </button>
-      <button
-        onClick={onZoomOut}
-        className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500"
-        title="Zoom out"
-      >
+      <button onClick={onZoomOut} className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500" title="Zoom out">
         <ZoomOut size={18} />
       </button>
-      <button
-        onClick={onToggleFullscreen}
-        className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500"
-        title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-      >
+      <button onClick={onToggleFullscreen} className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500" title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
         {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
       </button>
     </div>
@@ -370,31 +335,92 @@ function MapRefSetter({ mapRefCb }) {
   return null;
 }
 
-function MapPanel({ totalIncidents }) {
-  const [districts, setDistricts] = useState([]);
+// Normalise a ward_id like "2.0" → "2"
+// Unified normaliser — ensures boundary IDs and summary item IDs use the same key
+function normaliseId(rawId, level) {
+  if (rawId == null || rawId === "") return "";
+  const s = String(rawId).trim();
+  if (level === "ward") {
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? String(Math.round(n)) : s;
+  }
+  if (level === "district") {
+    const n = parseInt(s, 10);
+    return Number.isFinite(n) ? String(n).padStart(3, "0") : s;
+  }
+  // beat — keep as-is
+  return s;
+}
+
+// Keep individual helpers as thin wrappers for readability
+const normaliseWardId = (id) => normaliseId(id, "ward");
+const normaliseDistrictId = (id) => normaliseId(id, "district");
+const normaliseBeatId = (id) => normaliseId(id, "beat");
+
+// Depth sanitiser to fix extraneous array wrappers from API payloads
+function sanitizeCoordinates(type, coords) {
+  if (!coords || !coords.length) return coords;
+  // MultiPolygon requires strictly 4 levels of depth: [ [ [ [lng, lat] ] ] ]
+  // Polygon requires strictly 3 levels of depth: [ [ [lng, lat] ] ]
+  const getDepth = (arr) => Array.isArray(arr) ? 1 + getDepth(arr[0]) : 0;
+  let currentDepth = getDepth(coords);
+  const targetDepth = type === "MultiPolygon" ? 4 : type === "Polygon" ? 3 : currentDepth;
+
+  let safeCoords = coords;
+  while (currentDepth > targetDepth) {
+    safeCoords = safeCoords.flat(1);
+    currentDepth--;
+  }
+  return safeCoords;
+}
+
+// Build a GeoJSON Feature from a boundary object (already has type + coordinates)
+function toGeoJSONFeature(boundary) {
+  if (!boundary) return null;
+  if (boundary.type === "Feature") {
+    if (boundary.geometry && boundary.geometry.coordinates) {
+      boundary.geometry.coordinates = sanitizeCoordinates(boundary.geometry.type, boundary.geometry.coordinates);
+    }
+    return boundary;
+  }
+
+  return {
+    type: "Feature",
+    geometry: {
+      type: boundary.type,
+      coordinates: sanitizeCoordinates(boundary.type, boundary.coordinates)
+    },
+    properties: {}
+  };
+}
+
+// ── MapPanel ────────────────────────────────────────────────────────────
+
+function MapPanel({ activeTab, countsMap, kpiData, bins, selectedIds }) {
+  const [boundaries, setBoundaries] = useState([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
   const mapRef = useRef(null);
   const containerRef = useRef(null);
   const DEFAULT_CENTER = [41.83, -87.72];
   const DEFAULT_ZOOM = 10.5;
 
-  const setMapRef = useCallback((map) => { mapRef.current = map; }, []);
+  const setMapRef = useCallback((map) => {
+    mapRef.current = map;
+    setMapReady(true);
+  }, []);
 
   const handleZoomIn = () => mapRef.current?.zoomIn();
   const handleZoomOut = () => mapRef.current?.zoomOut();
-  const handleReset = () => {
-    if (mapRef.current) {
-      mapRef.current.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-    }
-  };
+  const handleReset = () => mapRef.current?.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 
   const toggleFullscreen = () => {
     const el = containerRef.current;
     if (!el) return;
     if (!document.fullscreenElement) {
-      el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+      el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => { });
     } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => { });
     }
   };
 
@@ -407,43 +433,59 @@ function MapPanel({ totalIncidents }) {
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
 
+  // Re-fetch boundaries when tab changes
   useEffect(() => {
-    const fetchDistricts = async () => {
+    let cancelled = false;
+    async function load() {
       try {
-        const res = await fetch("/chicago_districts.geojson");
-        const data = await res.json();
-        if (data && data.features) {
-          // Deduplicate by dist_num (keep first occurrence)
-          const seen = new Set();
-          const mappedDistricts = [];
-          for (const f of data.features) {
-            const rawId = f.properties.dist_num || f.properties.district || f.properties.DIST_NUM || f.properties.DISTRICT;
-            const id = rawId ? String(rawId).padStart(3, '0') : "000";
-            if (seen.has(id)) continue;
-            seen.add(id);
-            mappedDistricts.push({
-              district_id: id,
-              boundary: { type: "Feature", geometry: f.geometry, properties: {} }
-            });
+        let raw = [];
+        if (activeTab === "Police Districts" || activeTab === "Community Areas") {
+          raw = await fetchDistrictBoundaries();
+          // raw: [{ district_id, district_name, boundary, ... }]
+          setBoundaries(raw.map((d, i) => ({
+            id: normaliseDistrictId(d.district_id),
+            label: d.district_id,
+            boundary: d.boundary,
+            uid: `dist-${d.district_id}-${i}`
+          })));
+        } else if (activeTab === "Wards") {
+          raw = await fetchWardBoundaries();
+          // raw items may use ward_id, WARD, ward, or ward_num — try all
+          // Do NOT deduplicate because wards are aggregated from precincts (multiple polygons per ward)
+          const deduped = [];
+          for (let i = 0; i < raw.length; i++) {
+            const w = raw[i];
+            const rawWardId = w.ward_id ?? w.ward ?? w.WARD ?? w.ward_num;
+            const wid = normaliseWardId(rawWardId);
+            if (!wid) continue;
+            deduped.push({ id: wid, label: wid, boundary: w.boundary, uid: `ward-${wid}-${i}` });
           }
-          setDistricts(mappedDistricts);
+          if (!cancelled) setBoundaries(deduped);
+        } else if (activeTab === "Police Beats") {
+          raw = await fetchPoliceBeats();
+          // raw: [{ beat_num, district, sector, beat, boundary }]
+          if (!cancelled) setBoundaries(raw.map((b, i) => ({
+            id: b.beat_num,
+            label: b.beat_num,
+            boundary: b.boundary,
+            uid: `beat-${b.beat_num}-${i}`
+          })));
         }
       } catch (e) {
-        console.error("Failed to load local districts GeoJSON", e);
+        console.error("MapPanel boundary load error:", e);
       }
-    };
-    fetchDistricts();
-  }, []);
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [activeTab]);
 
-  const countsMap = useMemo(() => {
-    const map = new Map();
-    MOCK_DISTRICTS.forEach(d => map.set(d.name, d.count));
-    return map;
-  }, []);
+  // Legend bins from live data
+  const legendBins = bins && bins.length > 0 ? bins : [
+    { min: 0, max: Infinity, color: "#b9d4c6" },
+  ];
 
   return (
     <GscipCard className="relative bg-[#e8e9ea]">
-      {/* Header spanning above Map */}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-xl text-gray-500 tracking-wide font-medium">Map of Incidents</h3>
         <div className="flex items-center gap-3 text-gray-400">
@@ -451,62 +493,66 @@ function MapPanel({ totalIncidents }) {
           <SquareStack size={16} className="cursor-pointer hover:text-gray-600" />
         </div>
       </div>
-
-      <div ref={containerRef} className={`relative rounded bg-[#eff1f1] border border-gray-200 overflow-hidden ${isFullscreen ? '' : ''}`} style={{ height: isFullscreen ? '100vh' : 620 }}>
-        <MapContainer 
-          center={DEFAULT_CENTER} 
-          zoom={DEFAULT_ZOOM} 
-          scrollWheelZoom={true} 
+      <div style={{ height: 600 }} className="relative w-full overflow-hidden rounded-lg">
+        <MapContainer
+          center={DEFAULT_CENTER}
+          zoom={DEFAULT_ZOOM}
+          scrollWheelZoom={true}
           className="w-full h-full bg-[#eff1f1]"
           zoomControl={false}
         >
           <MapRefSetter mapRefCb={setMapRef} />
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"
-          />
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png" />
           <DropShadowPainter />
-          
-          {districts.filter(d => d.boundary).map(d => {
-            const count = countsMap.get(d.district_id) || 450; 
-            const bin = BINS.find(b => count >= b.min && count <= b.max) || BINS[4];
-            
+
+          {boundaries.map((b) => {
+            if (!b.boundary) return null;
+
+            // Filter features: 
+            // 1. Get the count from the current data result (countsMap), defaulting to 0 if missing.
+            const count = countsMap.get(b.id) || 0;
+
+            // 2. Further filter to only show selected ones if an explicit selection is active at this level
+            if (selectedIds && selectedIds.length > 0 && !selectedIds.includes(b.id)) return null;
+
+            const feature = toGeoJSONFeature(b.boundary);
+            if (!feature) return null;
+            const fillColor = getBinColor(count, legendBins);
             return (
               <GeoJSON
-                  key={d.district_id}
-                  data={d.boundary}
-                  style={{
-                    fillColor: bin.color,
-                    fillOpacity: 1,
-                    color: "#4f504f", 
-                    weight: 1,
-                  }}
-                  onEachFeature={(feature, layer) => {
-                     const numStr = d.district_id.replace(/^0+/, '');
-                     layer.bindTooltip(numStr, {
-                       permanent: true,
-                       direction: "center",
-                       className: "bg-transparent border-0 shadow-none text-gray-700 font-semibold text-xs text-shadow-sm",
-                     });
-                     layer.bindPopup(
-                       `<div style="font-size:13px;line-height:1.6;padding:2px 4px;">
-                         <b>Police District:</b> ${d.district_id}<br/>
-                         <b>Count of Incidents:</b> ${count.toLocaleString()}
-                       </div>`,
-                       { className: "leaflet-popup-custom" }
-                     );
-                     layer.on({
-                       mouseover: (e) => {
-                         e.target.setStyle({ weight: 3, color: "#333", fillOpacity: 0.85 });
-                       },
-                       mouseout: (e) => {
-                         e.target.setStyle({ weight: 1, color: "#4f504f", fillOpacity: 1 });
-                       },
-                       click: (e) => {
-                         e.target.openPopup();
-                       }
-                     });
-                  }}
-                />
+                key={`${b.uid}-${count}`}
+                data={feature}
+                style={{
+                  fillColor,
+                  fillOpacity: 0.85,
+                  color: "#272727",
+                  weight: 1.5,
+                }}
+                onEachFeature={(feature, layer) => {
+                  const typeLabel = activeTab === "Police Districts" ? "Police District" :
+                    activeTab === "Police Beats" ? "Police Beat" :
+                      activeTab === "Wards" ? "Ward" : "Area";
+
+                  // Dark popup that shows on click
+                  layer.bindPopup(
+                    `<div style="color: white; min-width: 140px; margin: -4px;">
+                      <p style="font-weight: 700; font-size: 14px; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 4px;">${typeLabel}: ${b.id}</p>
+                      <p style="font-size: 12px; margin: 0; opacity: 0.9;">Count of Incidents: <span style="font-weight: 600;">${count.toLocaleString()}</span></p>
+                    </div>`,
+                    { offset: [0, -10] }
+                  );
+
+                  layer.on({
+                    mouseover: (e) => {
+                      e.target.setStyle({ weight: 3, color: "#000", fillOpacity: 1 });
+                      e.target.bringToFront();
+                    },
+                    mouseout: (e) => {
+                      e.target.setStyle({ weight: 1.5, color: "#272727", fillOpacity: 0.85 });
+                    },
+                  });
+                }}
+              />
             );
           })}
         </MapContainer>
@@ -519,36 +565,53 @@ function MapPanel({ totalIncidents }) {
           onToggleFullscreen={toggleFullscreen}
         />
 
-        {/* KPI Card Overlay */}
+        {/* KPI Overlay */}
         <div className="absolute top-8 right-8 z-[500] bg-[#e8e9eb] px-10 py-6 rounded-xl shadow-lg border border-gray-200 min-w-[240px] text-center">
           <div className="text-5xl font-extralight text-black tracking-tight">
-            20,956
+            {kpiData?.total_incidents?.toLocaleString() ?? "—"}
           </div>
-          <div className="text-[13px] text-gray-500 mt-4">
-            Reported Incidents
-          </div>
+          <div className="text-[13px] text-gray-500 mt-2">Reported Incidents</div>
+          {kpiData?.arrest_rate_pct != null && (
+            <div className="mt-3 grid grid-cols-2 gap-2 text-left">
+              <div>
+                <div className="text-[11px] text-gray-400">Arrest Rate</div>
+                <div className="text-sm font-semibold text-gray-700">{kpiData.arrest_rate_pct.toFixed(1)}%</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-gray-400">Domestic Rate</div>
+                <div className="text-sm font-semibold text-gray-700">{kpiData.domestic_rate_pct?.toFixed(1) ?? "—"}%</div>
+              </div>
+            </div>
+          )}
         </div>
-        <div className="absolute top-44 right-8 z-[500] text-[11px] italic text-gray-500">
+        <div className="absolute top-52 right-8 z-[500] text-[11px] italic text-gray-500">
           Hold Ctrl to select many
         </div>
 
         {/* Legend Overlay */}
-        <div className="absolute bottom-6 left-6 z-[500] bg-[#e6e8ea] px-3 py-3 rounded-lg shadow-md border border-gray-200">
-          <div className="space-y-1.5 min-w-[140px]">
-            {BINS.map((bin, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className="w-6 h-6 border border-gray-500" style={{ backgroundColor: bin.color }} />
-                <span className="text-[13px] text-gray-600 font-medium">{bin.label}</span>
-              </div>
-            ))}
+        {legendBins.length > 1 && (
+          <div className="absolute bottom-6 left-6 z-[500] bg-[#e6e8ea] px-3 py-3 rounded-lg shadow-md border border-gray-200">
+            <div className="text-[11px] font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Incidents</div>
+            <div className="space-y-1.5 min-w-[150px]">
+              {[...legendBins].reverse().map((bin, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-5 h-5 border border-gray-400" style={{ backgroundColor: bin.color }} />
+                  <span className="text-[12px] text-gray-600 font-medium">
+                    {bin.max === Infinity
+                      ? `≥ ${Math.round(bin.min).toLocaleString()}`
+                      : `${Math.round(bin.min).toLocaleString()} – ${Math.round(bin.max).toLocaleString()}`}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </GscipCard>
   );
 }
 
-const CRIME_SUB_TABS = ["Crime Site Information", "Map Area Crime", "Crime Dashboard"];
+const CRIME_SUB_TABS = ["Map Area Crime", "Crime Dashboard"];
 
 function CrimeSiteInformation() {
   return (
@@ -616,9 +679,9 @@ function MapAreaCrime() {
     const el = containerRef.current;
     if (!el) return;
     if (!document.fullscreenElement) {
-      el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+      el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => { });
     } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => { });
     }
   };
 
@@ -892,7 +955,7 @@ function MapAreaCrime() {
             ))}
           </div>
 
-          <div className="border-t mt-4 pt-3" style={{ borderColor: "var(--color-border)" }}>
+          <div className="border-t pt-4" style={{ borderColor: "var(--color-border)" }}>
             <p className="text-xs font-semibold mb-1" style={{ color: "var(--color-text-secondary)" }}>Police Districts</p>
           </div>
         </div>
@@ -918,9 +981,9 @@ function CrimeDashboard() {
     const el = containerRef.current;
     if (!el) return;
     if (!document.fullscreenElement) {
-      el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+      el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => { });
     } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => { });
     }
   };
 
@@ -1282,7 +1345,7 @@ function CrimeDashboard() {
 }
 
 function CrimesSection() {
-  const [subTab, setSubTab] = useState("Crime Site Information");
+  const [subTab, setSubTab] = useState("Map Area Crime");
 
   return (
     <div>
@@ -1304,7 +1367,7 @@ function CrimesSection() {
         ))}
       </div>
 
-      {subTab === "Crime Site Information" && <CrimeSiteInformation />}
+      {/* {subTab === "Crime Site Information" && <CrimeSiteInformation />} */}
       {subTab === "Map Area Crime" && <MapAreaCrime />}
       {subTab === "Crime Dashboard" && <CrimeDashboard />}
     </div>
@@ -1312,38 +1375,240 @@ function CrimesSection() {
 }
 
 export default function SummarySection({ activeTab = "Police Districts" }) {
-  const [timeFrame, setTimeFrame] = useState("Last 365 days");
-  const [selectedCrimes, setSelectedCrimes] = useState([]);
+  const [timeFrame, setTimeFrame] = useState("Last 30 days");
+  const [selectedCrimes, setSelectedCrimes] = useState([]);   // crime type names
+
+  // Geographic selection states
   const [selectedDistricts, setSelectedDistricts] = useState([]);
-
-  const toggleCrime = (name) => {
-    setSelectedCrimes((prev) =>
-      prev.includes(name) ? prev.filter((c) => c !== name) : [...prev, name]
-    );
-  };
-
-  const toggleDistrict = (name) => {
-    setSelectedDistricts((prev) =>
-      prev.includes(name) ? prev.filter((d) => d !== name) : [...prev, name]
-    );
-  };
-
-  const resetCrimes = () => setSelectedCrimes([]);
-  const resetDistricts = () => setSelectedDistricts([]);
-  const applyCrimes = () => {};
-  const applyDistricts = () => {};
-
+  const [selectedWards, setSelectedWards] = useState([]);
   const [selectedBeats, setSelectedBeats] = useState([]);
-  const toggleBeat = (name) =>
-    setSelectedBeats((prev) =>
-      prev.includes(name) ? prev.filter((b) => b !== name) : [...prev, name]
-    );
-  const resetBeats = () => setSelectedBeats([]);
 
-  const totalIncidents = MOCK_CRIME_TYPES.reduce((sum, c) => sum + c.count, 0);
+  const [appliedFilters, setAppliedFilters] = useState({
+    timeFrame: "Last 30 days",
+    selectedCrimes: [],
+    selectedDistricts: [],
+    selectedWards: [],
+    selectedBeats: [],
+  });
+  const [lastTab, setLastTab] = useState(activeTab);
 
-  const tabConfig = TAB_DATA[activeTab] || TAB_DATA["Police Districts"];
+  // Sync helpers
+  const isDistrictsTab = activeTab === "Police Districts";
+  const isWardsTab = activeTab === "Wards";
   const isBeatsTab = activeTab === "Police Beats";
+  const level = TAB_LEVEL[activeTab] ?? "district";
+
+  // Reset geographic and other filters when tab changes to avoid cross-pollination
+  useEffect(() => {
+    if (activeTab !== lastTab) {
+      setSelectedDistricts([]);
+      setSelectedWards([]);
+      setSelectedBeats([]);
+      setSelectedCrimes([]);
+      setTimeFrame("Last 30 days");
+
+      setAppliedFilters({
+        timeFrame: "Last 30 days",
+        selectedCrimes: [],
+        selectedDistricts: [],
+        selectedWards: [],
+        selectedBeats: [],
+      });
+
+      setGeoSummary({ total_incidents: 0, items: [] });
+      setCrimeTypes([]);
+      setDateData([]);
+      setKpiData(null);
+
+      setLastTab(activeTab);
+    }
+  }, [activeTab, lastTab]);
+
+  // Derived dates based on applied timeframe
+  const { dateFrom, dateTo } = useMemo(() => timeFrameToDates(appliedFilters.timeFrame), [appliedFilters.timeFrame]);
+
+  // ── API data state ──
+  const [geoSummary, setGeoSummary] = useState({ total_incidents: 0, items: [] });
+  const [crimeTypes, setCrimeTypes] = useState([]);
+  const [dateData, setDateData] = useState([]);
+  const [kpiData, setKpiData] = useState(null);
+
+  const [loadingGeo, setLoadingGeo] = useState(false);
+  const [loadingCrimes, setLoadingCrimes] = useState(false);
+  const [loadingDate, setLoadingDate] = useState(false);
+  const [loadingKpi, setLoadingKpi] = useState(false);
+
+  // Build filter params for API calls based on applied values
+  const geoFilterParams = useMemo(() => {
+    if (level === "ward") return { wardIds: appliedFilters.selectedWards };
+    if (level === "district") return { districtIds: appliedFilters.selectedDistricts };
+    if (level === "beat") return { districtIds: appliedFilters.selectedDistricts, beatIds: appliedFilters.selectedBeats };
+    return {};
+  }, [level, appliedFilters.selectedDistricts, appliedFilters.selectedWards, appliedFilters.selectedBeats]);
+
+  const crimeTypeIds = useMemo(
+    () => appliedFilters.selectedCrimes.map((name) => name.toLowerCase().replace(/\s+/g, "_")),
+    [appliedFilters.selectedCrimes]
+  );
+
+  // ── Fetching Logic ──
+
+  // 1. Fetch geo summary (the core data for the active tab)
+  useEffect(() => {
+    setLoadingGeo(true);
+    fetchGeospatialSummary({
+      level,
+      dateFrom,
+      dateTo,
+      ...geoFilterParams,
+      ...(crimeTypeIds.length ? { crimeTypeIds } : {}),
+    })
+      .then((data) => setGeoSummary(data))
+      .finally(() => setLoadingGeo(false));
+  }, [level, dateFrom, dateTo, crimeTypeIds, geoFilterParams]);
+
+  // 2. Fetch District list context (used for the District filter in Beats tab)
+  const [districtMeta, setDistrictMeta] = useState({ items: [] });
+  useEffect(() => {
+    fetchGeospatialSummary({ level: "district", dateFrom, dateTo, ...(crimeTypeIds.length ? { crimeTypeIds } : {}) })
+      .then(setDistrictMeta);
+  }, [dateFrom, dateTo, crimeTypeIds]);
+
+  // 3. Fetch crime type breakdown
+  useEffect(() => {
+    setLoadingCrimes(true);
+    fetchIncidentsByCrimeType({ dateFrom, dateTo, ...geoFilterParams })
+      .then((data) => setCrimeTypes(data))
+      .finally(() => setLoadingCrimes(false));
+  }, [dateFrom, dateTo, geoFilterParams]);
+
+  // 4. Fetch trend data
+  useEffect(() => {
+    setLoadingDate(true);
+    fetchIncidentsByDate({
+      dateFrom,
+      dateTo,
+      ...geoFilterParams,
+      ...(crimeTypeIds.length ? { crimeTypeIds } : {}),
+    })
+      .then((data) => setDateData(data))
+      .finally(() => setLoadingDate(false));
+  }, [dateFrom, dateTo, geoFilterParams, crimeTypeIds]);
+
+  // 5. Fetch KPIs
+  useEffect(() => {
+    setLoadingKpi(true);
+    fetchSummaryKPIs({
+      dateFrom,
+      dateTo,
+      ...geoFilterParams,
+      ...(crimeTypeIds.length ? { crimeTypeIds } : {}),
+    })
+      .then((data) => setKpiData(data))
+      .finally(() => setLoadingKpi(false));
+  }, [dateFrom, dateTo, geoFilterParams, crimeTypeIds]);
+
+  // ── Derived View-Model Data ──
+
+  // Selected Geo IDs for the Map and KPI calculations
+  const currentSelectedIds = useMemo(() => {
+    if (isDistrictsTab) return appliedFilters.selectedDistricts;
+    if (isWardsTab) return appliedFilters.selectedWards;
+    if (isBeatsTab) return appliedFilters.selectedBeats;
+    return [];
+  }, [isDistrictsTab, isWardsTab, isBeatsTab, appliedFilters.selectedDistricts, appliedFilters.selectedWards, appliedFilters.selectedBeats]);
+
+  // Filtered items for the Bar Chart (Top 10 sorted or filtered selection)
+  const filteredGeoChartData = useMemo(() => {
+    const isFiltered = currentSelectedIds.length > 0;
+    let list = geoSummary.items;
+
+    if (isFiltered) {
+      // Filter mode: show only selected items, no slice
+      list = list.filter((item) => currentSelectedIds.includes(item.id));
+      const data = list.map((item) => ({
+        name: item.id,
+        count: item.crime_count,
+      }));
+      return data.sort((a, b) => b.count - a.count);
+    } else {
+      // Ranking mode: show Top 10 of available items
+      const data = list.map((item) => ({
+        name: item.id,
+        count: item.crime_count,
+      }));
+      return data.sort((a, b) => b.count - a.count).slice(0, 10);
+    }
+  }, [geoSummary.items, currentSelectedIds]);
+
+  // Calculate sum for the KPI overlay (Theft vs Total etc)
+  const calculatedTotalCount = useMemo(() => {
+    // If we have an explicit selection at the current level, sum only those
+    if (currentSelectedIds.length > 0) {
+      return geoSummary.items
+        .filter(i => currentSelectedIds.includes(i.id))
+        .reduce((sum, i) => sum + i.crime_count, 0);
+    }
+    // Otherwise, it's the total returned by the API (which is already filtered by context)
+    return geoSummary.total_incidents || 0;
+  }, [geoSummary, currentSelectedIds]);
+
+  // Crime chart data
+  const filteredCrimeChartData = useMemo(() => {
+    if (appliedFilters.selectedCrimes.length === 0) return crimeTypes;
+    return crimeTypes.filter((ct) => appliedFilters.selectedCrimes.includes(ct.name));
+  }, [crimeTypes, appliedFilters.selectedCrimes]);
+
+  // Map support — build countsMap using the SAME normaliseId so boundary and summary IDs always match
+  const countsMap = useMemo(() => {
+    const m = new Map();
+    geoSummary.items.forEach((item) => {
+      // Insert both the raw id AND the normalised id so any format mismatch is absorbed
+      const rawId = item.id ?? item.ward_id ?? item.district_id ?? item.beat_num;
+      const normId = normaliseId(rawId, level);
+      if (rawId != null) m.set(String(rawId).trim(), item.crime_count);
+      if (normId) m.set(normId, item.crime_count);
+    });
+    return m;
+  }, [geoSummary.items, level]);
+
+  const choroplethBins = useMemo(() => buildBins(geoSummary.items), [geoSummary.items]);
+
+  // Filter Panel Props
+  const mainFilterItems = useMemo(
+    () => geoSummary.items.map((item) => ({
+      id: item.id,
+      name: item.name ?? item.id,
+      count: item.crime_count,
+    })),
+    [geoSummary.items]
+  );
+
+  const districtContextItems = useMemo(
+    () => districtMeta.items.map((item) => ({
+      id: item.id,
+      name: `District ${item.id}`,
+      count: item.crime_count,
+    })),
+    [districtMeta.items]
+  );
+
+  // ── Handlers ──
+
+  const toggleCrime = (name) =>
+    setSelectedCrimes((prev) => prev.includes(name) ? prev.filter((c) => c !== name) : [...prev, name]);
+
+  const applyFilters = () => {
+    setAppliedFilters({
+      timeFrame,
+      selectedCrimes,
+      selectedDistricts,
+      selectedWards,
+      selectedBeats,
+    });
+  };
+
+  const tabConfig = TAB_LABELS[activeTab] || TAB_LABELS["Police Districts"];
 
   if (activeTab === "Crimes") {
     return <CrimesSection />;
@@ -1351,75 +1616,113 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
 
   return (
     <>
+      <style>{`
+        .custom-tooltip {
+          background: #2d2d2d !important;
+          color: white !important;
+          border: 1px solid rgba(255,255,255,0.1) !important;
+          border-radius: 4px !important;
+          padding: 8px 12px !important;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+          font-family: inherit !important;
+          opacity: 1 !important;
+        }
+        .custom-tooltip:before {
+          display: none !important;
+        }
+        .leaflet-tooltip-top:before, .leaflet-tooltip-bottom:before {
+          display: none !important;
+        }
+        .leaflet-popup-content-wrapper {
+          background: #2d2d2d !important;
+          color: white !important;
+          border-radius: 6px !important;
+        }
+        .leaflet-popup-tip {
+          background: #2d2d2d !important;
+        }
+      `}</style>
+
+      {/* Visual Charts Row */}
       <div className="grid grid-cols-12 gap-4 mb-6">
         <div className="col-span-3">
           <FiltersPanel
             selectedTimeFrame={timeFrame}
-            onTimeFrameChange={setTimeFrame}
-            crimeTypes={MOCK_CRIME_TYPES}
+            onTimeFrameChange={(tf) => {
+              setTimeFrame(tf);
+              setAppliedFilters(prev => ({ ...prev, timeFrame: tf }));
+            }}
+            crimeTypes={crimeTypes}
             selectedCrimes={selectedCrimes}
             onToggleCrime={toggleCrime}
-            onApply={applyCrimes}
-            onReset={resetCrimes}
+            onApply={applyFilters}
+            onReset={() => setSelectedCrimes([])}
           />
         </div>
-        <div className="col-span-3">
-          <CrimeTypeChart data={MOCK_CRIME_TYPES} />
+        <div className="col-span-4">
+          <CrimeTypeChart data={filteredCrimeChartData} loading={loadingCrimes} />
         </div>
-        <div className="col-span-6">
-          <DistrictChart data={tabConfig.data} title={tabConfig.chartTitle} />
+        <div className="col-span-5">
+          <GeoChart data={filteredGeoChartData} title={tabConfig.chartTitle} loading={loadingGeo} />
         </div>
       </div>
 
+      {/* Geospatial Filter Panels and Date Trend */}
       <div className="grid grid-cols-12 gap-4 mb-6">
-        {isBeatsTab ? (
-          <>
-            <div className="col-span-3 flex flex-col gap-4">
-              <DistrictFilterPanel
-                districts={MOCK_DISTRICTS}
-                selectedDistricts={selectedDistricts}
-                onToggleDistrict={toggleDistrict}
-                onApply={applyDistricts}
-                onReset={resetDistricts}
+        <div className="col-span-3">
+          {isBeatsTab ? (
+            <div className="flex flex-col gap-4">
+              <GeoFilterPanel
                 filterLabel="District"
+                items={districtContextItems}
+                selectedIds={selectedDistricts}
+                onToggle={(id) => setSelectedDistricts(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                onApply={applyFilters}
+                onReset={() => setSelectedDistricts([])}
                 compact
               />
-              <DistrictFilterPanel
-                districts={MOCK_BEATS}
-                selectedDistricts={selectedBeats}
-                onToggleDistrict={toggleBeat}
-                onApply={() => {}}
-                onReset={resetBeats}
+              <GeoFilterPanel
                 filterLabel="Beat"
+                items={mainFilterItems}
+                selectedIds={selectedBeats}
+                onToggle={(id) => setSelectedBeats(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                onApply={applyFilters}
+                onReset={() => setSelectedBeats([])}
                 compact
               />
             </div>
-            <div className="col-span-9">
-              <IncidentsByDateChart data={MOCK_DATE_DATA} chartHeight={500} />
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="col-span-3">
-              <DistrictFilterPanel
-                districts={tabConfig.data}
-                selectedDistricts={selectedDistricts}
-                onToggleDistrict={toggleDistrict}
-                onApply={applyDistricts}
-                onReset={resetDistricts}
-                filterLabel={tabConfig.filterLabel}
-              />
-            </div>
-            <div className="col-span-9">
-              <IncidentsByDateChart data={MOCK_DATE_DATA} />
-            </div>
-          </>
-        )}
+          ) : (
+            <GeoFilterPanel
+              filterLabel={tabConfig.filterLabel}
+              items={mainFilterItems}
+              selectedIds={isDistrictsTab ? selectedDistricts : (isWardsTab ? selectedWards : [])}
+              onToggle={(id) => {
+                if (isDistrictsTab) setSelectedDistricts(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+                if (isWardsTab) setSelectedWards(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+              }}
+              onApply={applyFilters}
+              onReset={() => {
+                if (isDistrictsTab) setSelectedDistricts([]);
+                if (isWardsTab) setSelectedWards([]);
+              }}
+            />
+          )}
+        </div>
+        <div className="col-span-9">
+          <IncidentsByDateChart data={dateData} loading={loadingDate} />
+        </div>
       </div>
 
+      {/* Map Content */}
       <div className="grid grid-cols-12 gap-4 mb-6">
         <div className="col-span-12">
-          <MapPanel totalIncidents={totalIncidents} />
+          <MapPanel
+            activeTab={activeTab}
+            countsMap={countsMap}
+            kpiData={{ ...kpiData, total_incidents: calculatedTotalCount }}
+            bins={choroplethBins}
+            selectedIds={currentSelectedIds}
+          />
         </div>
       </div>
     </>
