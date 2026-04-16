@@ -36,8 +36,9 @@ import {
 // const API_KEY = process.env.REACT_APP_GSCIP_API_KEY || "";
 const DASHBOARD_API_BASE = "http://localhost:9000/api/v1/dashboard";
 const REPORTS_API_BASE = "http://localhost:9000/api/v1/reports";
+const CHAT_API_BASE = "http://localhost:9000/api/v1/chat";
 export const AUTH_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NjE0NTY1NiwgImV4cCI6IDE3NzYyMzIwNTZ9.hpczogU1ZdaGFVvKCLl61IoywITeP6_lg_hMpOS-Srk";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NjMxNzkzNCwgImV4cCI6IDE3NzY0MDQzMzR9.tm0BE8uichz9p6kR5Q2pjmSGg5Xd6kSA_RGyhGwWsiQ";
 
 function normalizeDistrictId(value) {
   if (value == null) return "";
@@ -428,18 +429,43 @@ export async function downloadReport(reportId) {
 }
 
 // ── Chat / NL Query ────────────────────────────────────────────────────
-export async function sendChatMessage(message, context = {}) {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        role: "assistant",
-        content: `Based on the current data for your query about "${message}":\n\nThe analysis shows moderate activity in the selected area with a risk score trending upward over the past 7 days. I recommend monitoring blocks 047W and 063E closely.\n\nWould you like me to drill deeper into any specific metric?`,
-        source: "predictions (Feb 2025)",
-        model: "graph_xgb_v2.1",
-        actions: ["View on Heatmap", "Download CSV"],
-      });
-    }, 2000);
-  });
+/**
+ * Sends a natural language message to the LLM-powered chatbot.
+ * @param {string} message 
+ * @param {string|null} conversationId 
+ */
+export async function sendChatMessage(message, conversationId = null) {
+  try {
+    const res = await fetch(CHAT_API_BASE, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${AUTH_TOKEN}`,
+      },
+      body: JSON.stringify({ message, conversation_id: conversationId }),
+    });
+    if (!res.ok) throw new Error(`Chat API failed: ${res.status}`);
+    const data = await res.json();
+
+    // Transform backend schema to frontend message object
+    return {
+      role: "assistant",
+      content: data.response,
+      meta: {
+        intentId: data.intent_id,
+        aqlExecuted: data.aql_executed,
+        resultCount: data.result_count,
+        aql: data.aql
+      }
+    };
+  } catch (err) {
+    console.error("sendChatMessage failed:", err);
+    return {
+      role: "assistant",
+      content: "I'm sorry, I'm having trouble connecting to the crime intelligence engine right now.",
+      error: true
+    };
+  }
 }
 
 export async function fetchSuggestedPrompts(context = {}) {
