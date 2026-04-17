@@ -38,7 +38,7 @@ const DASHBOARD_API_BASE = "http://localhost:9000/api/v1/dashboard";
 const REPORTS_API_BASE = "http://localhost:9000/api/v1/reports";
 const CHAT_API_BASE = "http://localhost:9000/api/v1/chat";
 export const AUTH_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NjMxNzkzNCwgImV4cCI6IDE3NzY0MDQzMzR9.tm0BE8uichz9p6kR5Q2pjmSGg5Xd6kSA_RGyhGwWsiQ";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NjQxNDUwMSwgImV4cCI6IDE3NzY1MDA5MDF9._b0yFyt695F7RJrzP0Qg8I5X8KnzCjQrEZaYUxGH8A4";
 
 function normalizeDistrictId(value) {
   if (value == null) return "";
@@ -650,9 +650,55 @@ export async function fetchIncidentsByCrimeType({ dateFrom, dateTo, wardIds, dis
 }
 
 /**
- * Fetches individual incident points for the map.
- * @param {{ dateFrom, dateTo, wardIds?, districtIds?, crimeTypeIds?, limit? }} params
+ * Fetches available filter options, including the global date range.
  */
+export async function fetchFilterOptions() {
+  const res = await fetch(`${DASHBOARD_API_BASE}/filters`, {
+    headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+  });
+  if (!res.ok) throw new Error("Filters fetch failed");
+  return await res.json();
+}
+
+/**
+ * Fetches crime counts by day-of-week × hour-of-day from the real backend.
+ */
+export async function fetchHourlyTrends({ dateFrom, dateTo, districtIds } = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
+    if (districtIds?.length) params.set("district_ids", districtIds.join(","));
+    const res = await fetch(`${DASHBOARD_API_BASE}/trends/hourly?${params}`, {
+      headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+    });
+    if (!res.ok) throw new Error(`Hourly trends fetch failed: ${res.status}`);
+    return await res.json(); // { data: [{ day_of_week, hour_of_day, crime_count }], total }
+  } catch (err) {
+    console.error("fetchHourlyTrends failed:", err);
+    return { data: [], total: 0 };
+  }
+}
+
+/**
+ * Fetches the platform-wide crime trend time series.
+ */
+export async function fetchPlatformTrend({ dateFrom, dateTo, windowType = "day" } = {}) {
+  try {
+    const params = new URLSearchParams({ window_type: windowType });
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
+    const res = await fetch(`${DASHBOARD_API_BASE}/trends/platform?${params}`, {
+      headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+    });
+    if (!res.ok) throw new Error(`Platform trend fetch failed: ${res.status}`);
+    const payload = await res.json();
+    return (payload.data ?? []).map(row => ({ date: row.label, count: row.crime_count }));
+  } catch (err) {
+    console.error("fetchPlatformTrend failed:", err);
+    return [];
+  }
+}
 export async function fetchMapIncidents({ dateFrom, dateTo, wardIds, districtIds, beatIds, crimeTypeIds, limit = 500 } = {}) {
   try {
     const params = new URLSearchParams();
