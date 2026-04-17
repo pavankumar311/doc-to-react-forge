@@ -1,10 +1,10 @@
-import { useState, useMemo, useEffect } from "react";
-import { MapContainer, TileLayer, GeoJSON, Popup, useMap, Marker, useMapEvents } from "react-leaflet";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { MapContainer, TileLayer, GeoJSON, Popup, useMap, Marker, useMapEvents, Circle } from "react-leaflet";
 import L from "leaflet";
 import {
   Search, Calendar, Filter, Layers, Map as MapIcon,
   Loader2, Info, AlertCircle, ChevronLeft, ChevronRight,
-  ChevronDown
+  ChevronDown, MapPin, Navigation
 } from "lucide-react";
 import {
   fetchSummaryKPIs,
@@ -29,8 +29,8 @@ import {
 // ── Constants & Helpers ──────────────────────────────────────────────────
 
 const CRIME_TYPES = {
-  violent: { label: "Violent Crime (Index)", color: "#ef4444", items: ["Homicide", "Robbery", "Assault"] },
-  property: { label: "Property Crime (Index)", color: "#eab308", items: ["Burglary", "Theft", "Arson"] },
+  violent: { label: "Violent Crime (Index)", color: "#ef4444", items: ["Homicide", "Robbery", "Assault", "Battery", "Sexual Assault", "Kidnapping"] },
+  property: { label: "Property Crime (Index)", color: "#eab308", items: ["Burglary", "Theft", "Arson", "Motor Vehicle Theft", "Vandalism", "Criminal Damage"] },
   other: { label: "Other Crimes (Non-Index)", color: "#3b82f6", items: ["All Other Crimes"] },
 };
 
@@ -98,8 +98,23 @@ export default function CrimesSection() {
     district: "All",
     crimeToggles: { violent: true, property: true, other: true },
     layers: { ward: true, district: true, beat: true },
-    dateRange: "Last 30 Days"
+    dateRange: "Last 30 Days",
+    customFrom: "",
+    customTo: ""
   });
+
+  // Find Crime Near state
+  const [findNear, setFindNear] = useState({ 
+    active: false, 
+    address: "", 
+    lat: null, 
+    lng: null, 
+    radius: 500, 
+    searchFilters: { all: true, districts: true, beats: true, wards: true },
+    searchResults: [],
+    selectedResult: null // { type, id, name, geometry }
+  });
+  const geocodeRef = useRef(null);
 
   // Data State
   const [kpis, setKpis] = useState({ total: 0, violent: 0, property: 0, other: 0 });
@@ -149,27 +164,112 @@ export default function CrimesSection() {
     init();
   }, []);
 
+  // Search Handler for Find Crime Near
+  const handleFindNear = async () => {
+    const query = findNear.address.trim().toLowerCase();
+    if (!query) return;
+
+    let results = [];
+
+    // 1. Search Districts
+    if (findNear.searchFilters.all || findNear.searchFilters.districts) {
+      const match = boundaries.district?.features.filter(f => 
+        String(f.properties.district_id).toLowerCase().includes(query) ||
+        String(f.properties.district_name).toLowerCase().includes(query)
+      );
+      if (match) results.push(...match.map(m => ({ type: 'district', id: m.properties.district_id, name: m.properties.district_name || `District ${m.properties.district_id}`, geometry: m.geometry })));
+    }
+
+    // 2. Search Wards
+    if (findNear.searchFilters.all || findNear.searchFilters.wards) {
+      const match = boundaries.ward?.features.filter(f => 
+        String(f.properties.ward_id).toLowerCase().includes(query)
+      );
+      if (match) results.push(...match.map(m => ({ type: 'ward', id: m.properties.ward_id, name: `Ward ${m.properties.ward_id}`, geometry: m.geometry })));
+    }
+
+    // 3. Search Beats
+    if (findNear.searchFilters.all || findNear.searchFilters.beats) {
+      const match = boundaries.beat?.features.filter(f => 
+        String(f.properties.beat_id).toLowerCase().includes(query)
+      );
+      if (match) results.push(...match.map(m => ({ type: 'beat', id: m.properties.beat_id, name: `Beat ${m.properties.beat_id}`, geometry: m.geometry })));
+    }
+
+    // 4. Geocode as fallback or if specifically requested (ChicagoLocator concept)
+    if (results.length === 0 || findNear.searchFilters.all) {
+      try {
+        const geoQuery = encodeURIComponent(findNear.address + ", Chicago, IL");
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${geoQuery}&format=json&limit=3`);
+        const data = await res.json();
+        results.push(...data.map(d => ({ 
+          type: 'address', 
+          id: d.place_id, 
+          name: d.display_name, 
+          lat: parseFloat(d.lat), 
+          lng: parseFloat(d.lon),
+          geometry: { type: "Point", coordinates: [parseFloat(d.lon), parseFloat(d.lat)] }
+        })));
+      } catch (e) { console.error("Geocode failed:", e); }
+    }
+
+    setFindNear(prev => ({ ...prev, searchResults: results }));
+  };
+
+  const selectSearchResult = (res) => {
+    if (res.type === 'address') {
+      setFindNear(prev => ({ 
+        ...prev, 
+        active: true, 
+        lat: res.lat, 
+        lng: res.lng, 
+        selectedResult: res,
+        searchResults: [] 
+      }));
+    } else {
+      // Calculate centroid for geometry
+      const bounds = L.geoJSON(res.geometry).getBounds();
+      const center = bounds.getCenter();
+      setFindNear(prev => ({ 
+        ...prev, 
+        active: true, 
+        lat: center.lat, 
+        lng: center.lng, 
+        selectedResult: res,
+        searchResults: [] 
+      }));
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
       // 1. Sync with backend calendar to avoid "empty future" data
       let dateToObj = new Date();
-      try {
-        const filterMeta = await fetchFilterOptions();
-        if (filterMeta?.date_range?.max_date) {
-          dateToObj = new Date(filterMeta.date_range.max_date);
-        }
-      } catch (e) { console.warn("Calendar sync failed, using system clock:", e); }
+      let dateTo, dateFrom;
 
-      const dateTo = dateToObj.toISOString().split("T")[0];
-      const intervalDays = filters.dateRange === "Last 30 Days" ? 30 : 90;
-      const dateFrom = new Date(dateToObj.getTime() - intervalDays * 86400000).toISOString().split("T")[0];
+      if (filters.dateRange === "Custom" && filters.customFrom && filters.customTo) {
+        dateFrom = filters.customFrom;
+        dateTo = filters.customTo;
+      } else {
+        try {
+          const filterMeta = await fetchFilterOptions();
+          if (filterMeta?.date_range?.max_date) dateToObj = new Date(filterMeta.date_range.max_date);
+        } catch (e) { console.warn("Calendar sync failed, using system clock:", e); }
+        dateTo = dateToObj.toISOString().split("T")[0];
+        const intervalDays = filters.dateRange === "Last 30 Days" ? 30 : 90;
+        dateFrom = new Date(dateToObj.getTime() - intervalDays * 86400000).toISOString().split("T")[0];
+      }
 
+      // Context Filtering Logic
+      const selectedArea = findNear.selectedResult;
       const q = { 
         dateFrom, 
         dateTo, 
         limit: 1200,
-        districtIds: filters.district !== "All" ? [filters.district] : undefined
+        districtIds: selectedArea?.type === 'district' ? [selectedArea.id] : (filters.district !== "All" ? [filters.district] : undefined),
+        wardIds: selectedArea?.type === 'ward' ? [selectedArea.id] : undefined,
+        beatIds: selectedArea?.type === 'beat' ? [selectedArea.id] : undefined,
       };
       const [summary, types, mapPoints, beatSummary, wardSummary, trends, hourlyRes, platformTrend] = await Promise.all([
         fetchSummaryKPIs(q), 
@@ -230,7 +330,7 @@ export default function CrimesSection() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { loadData(); }, [filters.dateRange, filters.district]);
+  useEffect(() => { loadData(); }, [filters.dateRange, filters.district, filters.customFrom, filters.customTo, findNear.selectedResult]);
 
   const reactiveKpis = useMemo(() => {
     const v = filters.crimeToggles.violent ? kpis.violent : 0;
@@ -314,32 +414,63 @@ export default function CrimesSection() {
         {loading && <LoadingOverlay />}
 
         {/* Left Sidebar: Forensic Filters */}
-        <div className="col-span-3 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col gap-8">
+        <div className="col-span-3 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col gap-5 overflow-y-auto">
           <div>
-             <div className="flex flex-col items-center gap-1 mb-8">
+             <div className="flex flex-col items-center gap-1 mb-5">
                <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Forensic Filters</span>
-               <span className="text-[7px] font-black text-slate-300 uppercase tracking-tighter">Reporting Lab: 7-DAY</span>
+               <span className="text-[7px] font-black text-slate-300 uppercase tracking-tighter">Live CPD Data</span>
              </div>
 
-             <div className="space-y-3">
-                {["Last 30 Days", "Last 90 Days"].map(d => (
-                  <label key={d} className="flex items-center gap-3 cursor-pointer group">
-                    <div 
-                      onClick={() => setFilters({...filters, dateRange: d})}
-                      className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${filters.dateRange === d ? 'border-blue-500' : 'border-slate-200 group-hover:border-blue-300'}`}
-                    >
-                      {filters.dateRange === d && <div className="w-2 h-2 rounded-full bg-blue-500" />}
-                    </div>
-                    <span className={`text-[10px] font-black uppercase ${filters.dateRange === d ? 'text-slate-800' : 'text-slate-400'}`}>{d}</span>
-                  </label>
-                ))}
-            </div>
+             {/* Date Presets */}
+             <div className="space-y-2">
+               <div className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-1">Date Range</div>
+               {["Last 30 Days", "Last 90 Days"].map(d => (
+                 <label key={d} className="flex items-center gap-3 cursor-pointer group">
+                   <div 
+                     onClick={() => setFilters({...filters, dateRange: d, customFrom: "", customTo: ""})}
+                     className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${filters.dateRange === d ? 'border-blue-500' : 'border-slate-200 group-hover:border-blue-300'}`}
+                   >
+                     {filters.dateRange === d && <div className="w-2 h-2 rounded-full bg-blue-500" />}
+                   </div>
+                   <span className={`text-[10px] font-black uppercase ${filters.dateRange === d ? 'text-slate-800' : 'text-slate-400'}`}>{d}</span>
+                 </label>
+               ))}
+
+               {/* Custom Date Range */}
+               <label className="flex items-center gap-3 cursor-pointer group">
+                 <div
+                   onClick={() => setFilters({...filters, dateRange: "Custom"})}
+                   className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${filters.dateRange === "Custom" ? 'border-blue-500' : 'border-slate-200 group-hover:border-blue-300'}`}
+                 >
+                   {filters.dateRange === "Custom" && <div className="w-2 h-2 rounded-full bg-blue-500" />}
+                 </div>
+                 <span className={`text-[10px] font-black uppercase ${filters.dateRange === "Custom" ? 'text-slate-800' : 'text-slate-400'}`}>Custom Range</span>
+               </label>
+               {filters.dateRange === "Custom" && (
+                 <div className="ml-7 space-y-2 pt-1">
+                   <div>
+                     <div className="text-[8px] font-black text-slate-300 uppercase mb-1">From</div>
+                     <input type="date" value={filters.customFrom}
+                       onChange={e => setFilters({...filters, customFrom: e.target.value})}
+                       className="w-full bg-slate-50 border border-slate-100 rounded-lg text-[9px] font-bold text-slate-600 px-2 py-1.5 outline-none focus:ring-2 focus:ring-blue-400"
+                     />
+                   </div>
+                   <div>
+                     <div className="text-[8px] font-black text-slate-300 uppercase mb-1">To</div>
+                     <input type="date" value={filters.customTo}
+                       onChange={e => setFilters({...filters, customTo: e.target.value})}
+                       className="w-full bg-slate-50 border border-slate-100 rounded-lg text-[9px] font-bold text-slate-600 px-2 py-1.5 outline-none focus:ring-2 focus:ring-blue-400"
+                     />
+                   </div>
+                 </div>
+               )}
+             </div>
           </div>
 
           <div className="h-px bg-slate-50" />
 
           {/* Jurisdiction Selector */}
-          <div className="space-y-3">
+          <div className="space-y-2">
              <div className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-1 leading-none">Jurisdiction</div>
              <select 
               value={filters.district} 
@@ -347,7 +478,7 @@ export default function CrimesSection() {
               className="w-full bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-black text-slate-600 uppercase tracking-tighter px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all cursor-pointer"
             >
               <option value="All">All Districts</option>
-              {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              {districts.filter(d => d.id !== "013" && d.id !== "13" && String(d.id) !== "13").map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
 
@@ -383,6 +514,105 @@ export default function CrimesSection() {
                </label>
              ))}
           </div>
+
+          <div className="h-px bg-slate-50" />
+
+          {/* Find Crime Near */}
+          <div className="space-y-3">
+             <div className="flex items-center gap-2 mb-1">
+               <Navigation size={9} className="text-red-400" />
+               <div className="text-[8px] font-black text-red-400 uppercase tracking-widest">Find Crime Near</div>
+             </div>
+             
+             {/* Context Checkboxes */}
+             <div className="grid grid-cols-2 gap-y-1.5 p-3 bg-slate-50 border border-slate-100 rounded-xl">
+               {['all', 'districts', 'beats', 'wards'].map(cat => (
+                 <label key={cat} className="flex items-center gap-2 cursor-pointer group">
+                   <input 
+                     type="checkbox" 
+                     className="w-3 h-3 rounded text-red-500 focus:ring-red-400 cursor-pointer"
+                     checked={findNear.searchFilters[cat]}
+                     onChange={(e) => {
+                       const val = e.target.checked;
+                       if (cat === 'all') {
+                         setFindNear(p => ({ ...p, searchFilters: { all: val, districts: val, beats: val, wards: val } }));
+                       } else {
+                         setFindNear(p => ({ ...p, searchFilters: { ...p.searchFilters, [cat]: val, all: false } }));
+                       }
+                     }}
+                   />
+                   <span className="text-[9px] font-black text-slate-500 uppercase group-hover:text-red-400 transition-colors capitalize">{cat}</span>
+                 </label>
+               ))}
+             </div>
+
+             <div className="relative">
+               <input
+                 type="text"
+                 value={findNear.address}
+                 onChange={e => setFindNear(p => ({...p, address: e.target.value}))}
+                 onKeyDown={e => e.key === 'Enter' && handleFindNear()}
+                 placeholder="Search Area or Place..."
+                 className="w-full bg-slate-50 border border-slate-100 rounded-lg text-[10px] font-bold text-slate-600 px-3 py-2.5 outline-none focus:ring-2 focus:ring-red-300 placeholder:text-slate-300 pr-10"
+               />
+               <button onClick={handleFindNear} className="absolute right-2 top-2 p-1 text-slate-400 hover:text-red-400 transition-colors">
+                 <Search size={14} />
+               </button>
+             </div>
+
+             {/* Search Results List */}
+             {findNear.searchResults.length > 0 && (
+               <div className="bg-white border border-slate-200 rounded-xl shadow-xl max-h-[180px] overflow-y-auto animate-in fade-in slide-in-from-top-2">
+                 {findNear.searchResults.map((res, i) => (
+                   <div 
+                     key={i} 
+                     onClick={() => selectSearchResult(res)}
+                     className="px-3 py-2 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
+                   >
+                     <div className="text-[9px] font-black text-slate-700 uppercase">{res.name}</div>
+                     <div className="text-[7px] text-slate-400 font-bold uppercase tracking-tighter">{res.type} context</div>
+                   </div>
+                 ))}
+               </div>
+             )}
+
+             {/* Show Selected Result and Radius */}
+             {findNear.selectedResult && (
+               <div className="p-3 border border-red-100 bg-red-50/30 rounded-xl space-y-2">
+                 <div className="flex items-center justify-between">
+                   <div className="text-[9px] font-black text-red-500 uppercase">{findNear.selectedResult.name}</div>
+                   <button onClick={() => setFindNear(p => ({...p, selectedResult: null, active: false, lat: null, lng: null, address: "", searchResults: []}))} className="text-slate-400 hover:text-red-500 transition-colors">✕</button>
+                 </div>
+                 
+                 {findNear.selectedResult.type === 'address' && (
+                   <div>
+                     <div className="text-[8px] font-black text-slate-400 uppercase mb-1">Search Buffer</div>
+                     <select
+                       value={findNear.radius}
+                       onChange={e => setFindNear(p => ({...p, radius: Number(e.target.value)}))}
+                       className="w-full bg-white border border-slate-100 rounded-lg text-[9px] font-bold text-slate-600 px-2 py-1.5 outline-none focus:ring-2 focus:ring-red-300"
+                     >
+                       {[250, 500, 1000, 1500, 2000].map(r => <option key={r} value={r}>{r}m Buffer</option>)}
+                     </select>
+                   </div>
+                 )}
+               </div>
+             )}
+
+             {/* Help Text */}
+             <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100">
+               <div className="flex items-center gap-2 mb-1">
+                 <Info size={10} className="text-blue-500" />
+                 <span className="text-[8px] font-black text-blue-500 uppercase">Search Notes</span>
+               </div>
+               <div className="text-[8px] text-blue-700 leading-tight space-y-1">
+                 <p>• Districts: Use numbers (e.g., 011)</p>
+                 <p>• Beats: Use beat IDs (e.g., 1121)</p>
+                 <p>• Wards: Use ward number (e.g., 28)</p>
+                 <p>• Places: Enter street address or landmark</p>
+               </div>
+             </div>
+          </div>
         </div>
 
         {/* Center Canvas */}
@@ -393,11 +623,45 @@ export default function CrimesSection() {
                 <ZoomTracker setZoom={setZoom} />
                 <MapAutoScaler incidents={incidents} />
                 
-                {filters.layers.district && boundaries.district && <GeoJSON data={boundaries.district} style={{ color: "black", weight: 2.5, opacity: 0.8, fillColor: "transparent" }} />}
-                {filters.layers.beat && boundaries.beat && <GeoJSON data={boundaries.beat} style={{ color: "#0ea5e9", weight: 1.2, opacity: 0.5, dashArray: "5, 10", fillColor: "transparent" }} />}
-                {filters.layers.ward && boundaries.ward && <GeoJSON data={boundaries.ward} style={{ color: "#7dd3fc", weight: 1.0, opacity: 0.4, fillColor: "transparent" }} />}
+                {/* Global Layer Render (Filtered if SelectedResult is an area) */}
+                {(!findNear.selectedResult || findNear.selectedResult.type === 'address') && (
+                  <>
+                    {filters.layers.district && boundaries.district && <GeoJSON data={boundaries.district} style={{ color: "black", weight: 2.5, opacity: 0.8, fillColor: "transparent" }} />}
+                    {filters.layers.beat && boundaries.beat && <GeoJSON data={boundaries.beat} style={{ color: "#0ea5e9", weight: 1.2, opacity: 0.5, dashArray: "5, 10", fillColor: "transparent" }} />}
+                    {filters.layers.ward && boundaries.ward && <GeoJSON data={boundaries.ward} style={{ color: "#7dd3fc", weight: 1.0, opacity: 0.4, fillColor: "transparent" }} />}
+                  </>
+                )}
+
+                {/* Focus View: Only show the selected boundary */}
+                {findNear.selectedResult && findNear.selectedResult.type !== 'address' && (
+                  <>
+                    <GeoJSON 
+                      key={findNear.selectedResult.id}
+                      data={findNear.selectedResult.geometry} 
+                      style={{ color: "#ef4444", weight: 4, opacity: 1, fillColor: "#ef4444", fillOpacity: 0.05 }} 
+                    />
+                    <FindNearFlyTo lat={findNear.lat} lng={findNear.lng} />
+                  </>
+                )}
+
+                {/* Find Crime Near point radius circle */}
+                {findNear.active && findNear.lat && findNear.selectedResult?.type === 'address' && (
+                  <>
+                    <Circle
+                      center={[findNear.lat, findNear.lng]}
+                      radius={findNear.radius}
+                      pathOptions={{ color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.08, weight: 2, dashArray: '6 4' }}
+                    />
+                    <Marker position={[findNear.lat, findNear.lng]} icon={L.divIcon({ className: '', html: `<div style="width:12px;height:12px;background:#ef4444;border:2px solid white;border-radius:50%;box-shadow:0 0 8px #ef4444"></div>`, iconSize:[12,12], iconAnchor:[6,6] })} />
+                    <FindNearFlyTo lat={findNear.lat} lng={findNear.lng} />
+                  </>
+                )}
                 
-                {spatialClusters.map((c, idx) => (
+                {/* Marker Filtering (By radius for point, or by selection for area) */}
+                {(findNear.active && findNear.lat && findNear.selectedResult?.type === 'address' ? spatialClusters.filter(c => {
+                  const d = L.latLng(c.lat, c.lng).distanceTo(L.latLng(findNear.lat, findNear.lng));
+                  return d <= findNear.radius;
+                }) : spatialClusters).map((c, idx) => (
                   <Marker 
                     key={`${idx}`} 
                     position={[c.lat, c.lng]} 
@@ -766,6 +1030,16 @@ function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanki
       </div>
     </div>
   );
+}
+
+function FindNearFlyTo({ lat, lng }) {
+  const map = useMap();
+  useEffect(() => {
+    if (lat && lng) {
+      map.flyTo([lat, lng], 15, { duration: 1.5 });
+    }
+  }, [lat, lng, map]);
+  return null;
 }
 
 function ZoomTracker({ setZoom }) {
