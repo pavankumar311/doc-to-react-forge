@@ -10,23 +10,56 @@ import {
   fetchSummaryKPIs,
   fetchIncidentsByDate,
   fetchIncidentsByCrimeType,
+  fetchPlatformTrend,
+  fetchFilterOptions,
   fetchWardBoundaries,
   fetchDistrictBoundaries,
   fetchPoliceBeats,
 } from "../services/api";
 
-// ── Time frame helpers ──────────────────────────────────────────────────
-const TIME_FRAMES = ["Last 7 days", "Last 30 days", "Last 90 days", "Last 365 days"];
+const TIME_FRAMES = ["Last 7 Days", "Last 30 Days", "Last 90 Days", "Last 365 Days"];
 
-function timeFrameToDates(tf) {
-  const to = new Date();
-  const from = new Date();
-  if (tf === "Last 7 days") from.setDate(to.getDate() - 7);
-  else if (tf === "Last 30 days") from.setDate(to.getDate() - 30);
-  else if (tf === "Last 90 days") from.setDate(to.getDate() - 90);
-  else from.setFullYear(to.getFullYear() - 1);
-  const fmt = (d) => d.toISOString().slice(0, 10);
-  return { dateFrom: fmt(from), dateTo: fmt(to) };
+const MOCK_DISTRICTS = [
+  { name: "001", count: 450 }, { name: "002", count: 320 }, { name: "003", count: 210 },
+  { name: "004", count: 560 }, { name: "005", count: 180 }, { name: "006", count: 440 }
+];
+
+function getCentroid(geometry) {
+  try {
+    if (!geometry) return [41.8781, -87.6298];
+    let coords = geometry.coordinates || geometry;
+    if (geometry.type === "MultiPolygon") coords = coords[0][0];
+    else if (geometry.type === "Polygon") coords = coords[0];
+    else if (Array.isArray(coords) && Array.isArray(coords[0]) && Array.isArray(coords[0][0])) coords = coords[0][0];
+    
+    let lat = 0, lng = 0;
+    const pts = Array.isArray(coords) ? coords : [];
+    if (pts.length === 0) return [41.8781, -87.6298];
+    
+    pts.forEach(p => {
+      lng += p[0];
+      lat += p[1];
+    });
+    return [lat / pts.length, lng / pts.length];
+  } catch (e) {
+    return [41.8781, -87.6298];
+  }
+}
+
+// ── Time frame helpers ──────────────────────────────────────────────────
+function timeFrameToDates(tf, anchorDate) {
+  let baseDate = anchorDate instanceof Date && !isNaN(anchorDate) ? anchorDate : new Date();
+  
+  const timeframe = (tf || "").toLowerCase();
+  let intervalDays = 30;
+  if (timeframe.includes("7 day")) intervalDays = 7;
+  else if (timeframe.includes("90 day")) intervalDays = 90;
+  else if (timeframe.includes("365 day")) intervalDays = 365;
+
+  const dateTo = baseDate.toISOString().split("T")[0];
+  const dateFrom = new Date(baseDate.getTime() - intervalDays * 86400000).toISOString().split("T")[0];
+  
+  return { dateFrom, dateTo };
 }
 
 // Tab → API level mapping
@@ -121,7 +154,16 @@ function FiltersPanel({ selectedTimeFrame, onTimeFrameChange, crimeTypes, select
           <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--color-text-primary)" }}>
             Crime Type
           </label>
-          <button onClick={onReset} className="text-xs font-medium" style={{ color: "var(--color-azure)" }}>
+          <button
+            onClick={onReset}
+            disabled={selectedCrimes.length === 0}
+            className="text-xs font-medium transition-all"
+            style={{
+              color: selectedCrimes.length > 0 ? "var(--color-azure)" : "var(--color-text-muted)",
+              opacity: selectedCrimes.length > 0 ? 1 : 0.4,
+              cursor: selectedCrimes.length > 0 ? "pointer" : "default"
+            }}
+          >
             Reset
           </button>
         </div>
@@ -148,7 +190,8 @@ function FiltersPanel({ selectedTimeFrame, onTimeFrameChange, crimeTypes, select
 
       <button
         onClick={onApply}
-        className="w-full py-2 rounded-md text-sm font-medium text-white transition-colors"
+        disabled={selectedCrimes.length === 0}
+        className={`w-full py-2 rounded-md text-sm font-medium text-white transition-colors ${selectedCrimes.length === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-90'}`}
         style={{ background: "var(--color-cobalt)" }}
       >
         Apply
@@ -241,7 +284,18 @@ function GeoFilterPanel({ items, selectedIds, onToggle, onApply, onReset, filter
     <GscipCard style={compact ? { paddingTop: 12, paddingBottom: 12 } : {}}>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>{filterLabel || "Area"}</h3>
-        <button onClick={onReset} className="text-xs font-medium" style={{ color: "var(--color-azure)" }}>Reset</button>
+        <button
+          onClick={onReset}
+          disabled={selectedIds.length === 0}
+          className="text-xs font-medium transition-all"
+          style={{
+            color: selectedIds.length > 0 ? "var(--color-azure)" : "var(--color-text-muted)",
+            opacity: selectedIds.length > 0 ? 1 : 0.4,
+            cursor: selectedIds.length > 0 ? "pointer" : "default"
+          }}
+        >
+          Reset
+        </button>
       </div>
       <div className={`space-y-2 overflow-y-auto pr-2 ${compact ? "max-h-36" : "max-h-80"}`}>
         {items.map((item) => (
@@ -264,7 +318,8 @@ function GeoFilterPanel({ items, selectedIds, onToggle, onApply, onReset, filter
       </div>
       <button
         onClick={onApply}
-        className="w-full py-1.5 rounded-md text-sm font-medium text-white mt-3"
+        disabled={selectedIds.length === 0}
+        className={`w-full py-1.5 rounded-md text-sm font-medium text-white mt-3 transition-colors ${selectedIds.length === 0 ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-90'}`}
         style={{ background: "var(--color-cobalt)" }}
       >
         Apply
@@ -310,11 +365,14 @@ function DropShadowPainter() {
   return null;
 }
 
-function MapZoomControls({ onZoomIn, onZoomOut, onReset, isFullscreen, onToggleFullscreen }) {
+function MapZoomControls({ onZoomIn, onZoomOut, onReset, onFit, isFullscreen, onToggleFullscreen }) {
   return (
     <div className="absolute top-4 left-4 z-[500] flex flex-col gap-1.5">
       <button onClick={onReset} className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500" title="Reset view">
         <Home size={18} />
+      </button>
+      <button onClick={onFit} className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500" title="Zoom full map">
+        <Maximize size={18} />
       </button>
       <button onClick={onZoomIn} className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500" title="Zoom in">
         <ZoomIn size={18} />
@@ -323,7 +381,7 @@ function MapZoomControls({ onZoomIn, onZoomOut, onReset, isFullscreen, onToggleF
         <ZoomOut size={18} />
       </button>
       <button onClick={onToggleFullscreen} className="bg-white p-2 rounded shadow flex items-center justify-center cursor-pointer hover:bg-gray-50 border border-gray-100 text-gray-500" title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
-        {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+        {isFullscreen ? <Minimize size={18} /> : <SquareStack size={18} />}
       </button>
     </div>
   );
@@ -414,6 +472,16 @@ function MapPanel({ activeTab, countsMap, kpiData, bins, selectedIds }) {
   const handleZoomOut = () => mapRef.current?.zoomOut();
   const handleReset = () => mapRef.current?.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 
+  const handleFit = () => {
+    if (!mapRef.current || !boundaries.length) return;
+    const features = boundaries.map(b => toGeoJSONFeature(b.boundary)).filter(f => !!f);
+    if (!features.length) return;
+    const bounds = L.geoJSON(features).getBounds();
+    if (bounds.isValid()) {
+      mapRef.current.fitBounds(bounds, { padding: [30, 30] });
+    }
+  };
+
   const toggleFullscreen = () => {
     const el = containerRef.current;
     if (!el) return;
@@ -493,7 +561,11 @@ function MapPanel({ activeTab, countsMap, kpiData, bins, selectedIds }) {
           <SquareStack size={16} className="cursor-pointer hover:text-gray-600" />
         </div>
       </div>
-      <div style={{ height: 600 }} className="relative w-full overflow-hidden rounded-lg">
+      <div
+        ref={containerRef}
+        style={{ height: isFullscreen ? "100vh" : 600 }}
+        className={`relative w-full overflow-hidden rounded-lg transition-all ${isFullscreen ? 'z-[9999] bg-white' : ''}`}
+      >
         <MapContainer
           center={DEFAULT_CENTER}
           zoom={DEFAULT_ZOOM}
@@ -561,6 +633,7 @@ function MapPanel({ activeTab, countsMap, kpiData, bins, selectedIds }) {
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onReset={handleReset}
+          onFit={handleFit}
           isFullscreen={isFullscreen}
           onToggleFullscreen={toggleFullscreen}
         />
@@ -1375,16 +1448,32 @@ function CrimesSection() {
 }
 
 export default function SummarySection({ activeTab = "Police Districts" }) {
-  const [timeFrame, setTimeFrame] = useState("Last 30 days");
+  const [timeFrame, setTimeFrame] = useState("Last 30 Days");
   const [selectedCrimes, setSelectedCrimes] = useState([]);   // crime type names
 
   // Geographic selection states
   const [selectedDistricts, setSelectedDistricts] = useState([]);
   const [selectedWards, setSelectedWards] = useState([]);
   const [selectedBeats, setSelectedBeats] = useState([]);
+  const [dbMaxDate, setDbMaxDate] = useState(new Date());
+
+  // Sync with backend calendar to avoid "empty future" data discrepancy
+  useEffect(() => {
+    async function sync() {
+      try {
+        const meta = await fetchFilterOptions();
+        if (meta?.date_range?.max_date) {
+          setDbMaxDate(new Date(meta.date_range.max_date));
+        }
+      } catch (e) {
+        console.warn("SummarySection: Calendar sync failed, using system clock:", e);
+      }
+    }
+    sync();
+  }, []);
 
   const [appliedFilters, setAppliedFilters] = useState({
-    timeFrame: "Last 30 days",
+    timeFrame: "Last 30 Days",
     selectedCrimes: [],
     selectedDistricts: [],
     selectedWards: [],
@@ -1405,10 +1494,10 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
       setSelectedWards([]);
       setSelectedBeats([]);
       setSelectedCrimes([]);
-      setTimeFrame("Last 30 days");
+      setTimeFrame("Last 30 Days");
 
       setAppliedFilters({
-        timeFrame: "Last 30 days",
+        timeFrame: "Last 30 Days",
         selectedCrimes: [],
         selectedDistricts: [],
         selectedWards: [],
@@ -1418,14 +1507,17 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
       setGeoSummary({ total_incidents: 0, items: [] });
       setCrimeTypes([]);
       setDateData([]);
-      setKpiData(null);
+      setKpiData({ total_incidents: 0, arrest_count: 0, arrest_rate_pct: 0, domestic_count: 0, domestic_rate_pct: 0 });
 
       setLastTab(activeTab);
     }
   }, [activeTab, lastTab]);
 
   // Derived dates based on applied timeframe
-  const { dateFrom, dateTo } = useMemo(() => timeFrameToDates(appliedFilters.timeFrame), [appliedFilters.timeFrame]);
+  const { dateFrom, dateTo } = useMemo(() => 
+    timeFrameToDates(appliedFilters.timeFrame, dbMaxDate), 
+    [appliedFilters.timeFrame, dbMaxDate]
+  );
 
   // ── API data state ──
   const [geoSummary, setGeoSummary] = useState({ total_incidents: 0, items: [] });
@@ -1440,73 +1532,84 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
 
   // Build filter params for API calls based on applied values
   const geoFilterParams = useMemo(() => {
-    if (level === "ward") return { wardIds: appliedFilters.selectedWards };
-    if (level === "district") return { districtIds: appliedFilters.selectedDistricts };
-    if (level === "beat") return { districtIds: appliedFilters.selectedDistricts, beatIds: appliedFilters.selectedBeats };
+    const f = appliedFilters || {};
+    if (level === "ward") return { wardIds: f.selectedWards || [] };
+    if (level === "district") return { districtIds: f.selectedDistricts || [] };
+    if (level === "beat") return { districtIds: f.selectedDistricts || [], beatIds: f.selectedBeats || [] };
     return {};
-  }, [level, appliedFilters.selectedDistricts, appliedFilters.selectedWards, appliedFilters.selectedBeats]);
+  }, [level, appliedFilters?.selectedDistricts, appliedFilters?.selectedWards, appliedFilters?.selectedBeats]);
 
   const crimeTypeIds = useMemo(
-    () => appliedFilters.selectedCrimes.map((name) => name.toLowerCase().replace(/\s+/g, "_")),
-    [appliedFilters.selectedCrimes]
+    () => (appliedFilters?.selectedCrimes || []).map((name) => {
+       // Support both naming conventions
+       const norm = (name || "").toLowerCase().replace(/\s+/g, "_");
+       if (norm === "others") return "other";
+       return norm;
+    }),
+    [appliedFilters?.selectedCrimes]
   );
 
-  // ── Fetching Logic ──
-
-  // 1. Fetch geo summary (the core data for the active tab)
-  useEffect(() => {
-    setLoadingGeo(true);
-    fetchGeospatialSummary({
-      level,
-      dateFrom,
-      dateTo,
-      ...geoFilterParams,
-      ...(crimeTypeIds.length ? { crimeTypeIds } : {}),
-    })
-      .then((data) => setGeoSummary(data))
-      .finally(() => setLoadingGeo(false));
-  }, [level, dateFrom, dateTo, crimeTypeIds, geoFilterParams]);
-
-  // 2. Fetch District list context (used for the District filter in Beats tab)
   const [districtMeta, setDistrictMeta] = useState({ items: [] });
-  useEffect(() => {
-    fetchGeospatialSummary({ level: "district", dateFrom, dateTo, ...(crimeTypeIds.length ? { crimeTypeIds } : {}) })
-      .then(setDistrictMeta);
-  }, [dateFrom, dateTo, crimeTypeIds]);
 
-  // 3. Fetch crime type breakdown
-  useEffect(() => {
+  const loadAllData = useCallback(async () => {
+    setLoadingGeo(true);
     setLoadingCrimes(true);
-    fetchIncidentsByCrimeType({ dateFrom, dateTo, ...geoFilterParams })
-      .then((data) => setCrimeTypes(data))
-      .finally(() => setLoadingCrimes(false));
-  }, [dateFrom, dateTo, geoFilterParams]);
-
-  // 4. Fetch trend data
-  useEffect(() => {
     setLoadingDate(true);
-    fetchIncidentsByDate({
-      dateFrom,
-      dateTo,
-      ...geoFilterParams,
-      ...(crimeTypeIds.length ? { crimeTypeIds } : {}),
-    })
-      .then((data) => setDateData(data))
-      .finally(() => setLoadingDate(false));
-  }, [dateFrom, dateTo, geoFilterParams, crimeTypeIds]);
-
-  // 5. Fetch KPIs
-  useEffect(() => {
     setLoadingKpi(true);
-    fetchSummaryKPIs({
-      dateFrom,
-      dateTo,
-      ...geoFilterParams,
-      ...(crimeTypeIds.length ? { crimeTypeIds } : {}),
-    })
-      .then((data) => setKpiData(data))
-      .finally(() => setLoadingKpi(false));
-  }, [dateFrom, dateTo, geoFilterParams, crimeTypeIds]);
+
+    try {
+      let anchorDate = new Date();
+      const meta = await fetchFilterOptions();
+      if (meta?.date_range?.max_date) {
+        anchorDate = new Date(meta.date_range.max_date);
+        setDbMaxDate(anchorDate);
+      }
+
+      const { dateFrom: df, dateTo: dt } = timeFrameToDates(appliedFilters.timeFrame, anchorDate);
+      
+      const q = { 
+        dateFrom: df, 
+        dateTo: dt,
+        limit: 1200,
+        districtIds: (geoFilterParams.districtIds?.length) ? geoFilterParams.districtIds : undefined,
+        wardIds: (geoFilterParams.wardIds?.length) ? geoFilterParams.wardIds : undefined,
+        beatIds: (geoFilterParams.beatIds?.length) ? geoFilterParams.beatIds : undefined,
+        crimeTypeIds: (crimeTypeIds?.length) ? crimeTypeIds : undefined
+      };
+
+      const [gs, ct, trends, kpi] = await Promise.all([
+        fetchGeospatialSummary({ ...q, level }),
+        fetchIncidentsByCrimeType(q),
+        fetchPlatformTrend({ dateFrom: df, dateTo: dt }),
+        fetchSummaryKPIs(q)
+      ]);
+
+      setGeoSummary(gs || { total_incidents: 0, items: [] });
+      setCrimeTypes(ct || []);
+      setDateData(trends || []);
+      setKpiData(kpi || { total_incidents: 0, arrest_count: 0, arrest_rate_pct: 0, domestic_count: 0, domestic_rate_pct: 0 });
+
+      if (isBeatsTab) {
+        const dm = await fetchGeospatialSummary({ level: "district", dateFrom: df, dateTo: dt, ...(crimeTypeIds.length ? { crimeTypeIds } : {}) });
+        setDistrictMeta(dm);
+      }
+    } catch (e) {
+      console.warn("Dashboard sync failed:", e);
+    } finally {
+      setLoadingGeo(false);
+      setLoadingCrimes(false);
+      setLoadingDate(false);
+      setLoadingKpi(false);
+    }
+  }, [level, appliedFilters.timeFrame, geoFilterParams, crimeTypeIds, isBeatsTab]);
+
+  useEffect(() => {
+    // Explicitly check for ready state to avoid race conditions on mount
+    if (appliedFilters && activeTab) {
+      loadAllData();
+    }
+  }, [loadAllData, appliedFilters.timeFrame, activeTab]);
+
 
   // ── Derived View-Model Data ──
 
@@ -1521,7 +1624,7 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
   // Filtered items for the Bar Chart (Top 10 sorted or filtered selection)
   const filteredGeoChartData = useMemo(() => {
     const isFiltered = currentSelectedIds.length > 0;
-    let list = geoSummary.items;
+    let list = geoSummary?.items || [];
 
     if (isFiltered) {
       // Filter mode: show only selected items, no slice
@@ -1541,28 +1644,44 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
     }
   }, [geoSummary.items, currentSelectedIds]);
 
-  // Calculate sum for the KPI overlay (Theft vs Total etc)
+  // Detailed Category KPI derived from crimeTypes (to match CrimesSection logic)
+  const categoryKpis = useMemo(() => {
+    let v = 0, p = 0, o = 0;
+    (crimeTypes || []).forEach(item => {
+      const c = (item.category || "").toLowerCase();
+      if (c === "violent") v += item.count;
+      else if (c === "property") p += item.count;
+      else o += item.count;
+    });
+    return { total: v + p + o, violent: v, property: p, other: o };
+  }, [crimeTypes]);
+
+  // Calculate the total incident count for the KPI overlay
   const calculatedTotalCount = useMemo(() => {
-    // If we have an explicit selection at the current level, sum only those
+    // If we have an explicit selection at the current level, sum only those specific items
     if (currentSelectedIds.length > 0) {
       return geoSummary.items
-        .filter(i => currentSelectedIds.includes(i.id))
+        .filter((item) => {
+          const normId = normaliseId(item.id ?? item.ward_id ?? item.district_id ?? item.beat_num, level);
+          return currentSelectedIds.includes(normId || item.id);
+        })
         .reduce((sum, i) => sum + i.crime_count, 0);
     }
-    // Otherwise, it's the total returned by the API (which is already filtered by context)
-    return geoSummary.total_incidents || 0;
-  }, [geoSummary, currentSelectedIds]);
+    // Otherwise, use the category-derived total (which matches CrimesSection's 49k+)
+    return categoryKpis.total || kpiData?.total_incidents || geoSummary.total_incidents || 0;
+  }, [geoSummary.items, geoSummary.total_incidents, kpiData?.total_incidents, categoryKpis.total, currentSelectedIds, level]);
 
   // Crime chart data
   const filteredCrimeChartData = useMemo(() => {
-    if (appliedFilters.selectedCrimes.length === 0) return crimeTypes;
-    return crimeTypes.filter((ct) => appliedFilters.selectedCrimes.includes(ct.name));
+    const list = crimeTypes || [];
+    if (appliedFilters.selectedCrimes.length === 0) return list;
+    return list.filter((ct) => appliedFilters.selectedCrimes.includes(ct.name));
   }, [crimeTypes, appliedFilters.selectedCrimes]);
 
   // Map support — build countsMap using the SAME normaliseId so boundary and summary IDs always match
   const countsMap = useMemo(() => {
     const m = new Map();
-    geoSummary.items.forEach((item) => {
+    (geoSummary?.items || []).forEach((item) => {
       // Insert both the raw id AND the normalised id so any format mismatch is absorbed
       const rawId = item.id ?? item.ward_id ?? item.district_id ?? item.beat_num;
       const normId = normaliseId(rawId, level);
@@ -1576,7 +1695,7 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
 
   // Filter Panel Props
   const mainFilterItems = useMemo(
-    () => geoSummary.items.map((item) => ({
+    () => (geoSummary?.items || []).map((item) => ({
       id: item.id,
       name: item.name ?? item.id,
       count: item.crime_count,
@@ -1585,7 +1704,7 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
   );
 
   const districtContextItems = useMemo(
-    () => districtMeta.items.map((item) => ({
+    () => (districtMeta?.items || []).map((item) => ({
       id: item.id,
       name: `District ${item.id}`,
       count: item.crime_count,
@@ -1614,117 +1733,145 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
     return <CrimesSection />;
   }
 
-  return (
-    <>
-      <style>{`
-        .custom-tooltip {
-          background: #2d2d2d !important;
-          color: white !important;
-          border: 1px solid rgba(255,255,255,0.1) !important;
-          border-radius: 4px !important;
-          padding: 8px 12px !important;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
-          font-family: inherit !important;
-          opacity: 1 !important;
-        }
-        .custom-tooltip:before {
-          display: none !important;
-        }
-        .leaflet-tooltip-top:before, .leaflet-tooltip-bottom:before {
-          display: none !important;
-        }
-        .leaflet-popup-content-wrapper {
-          background: #2d2d2d !important;
-          color: white !important;
-          border-radius: 6px !important;
-        }
-        .leaflet-popup-tip {
-          background: #2d2d2d !important;
-        }
-      `}</style>
-
-      {/* Visual Charts Row */}
-      <div className="grid grid-cols-12 gap-4 mb-6">
-        <div className="col-span-3">
-          <FiltersPanel
-            selectedTimeFrame={timeFrame}
-            onTimeFrameChange={(tf) => {
-              setTimeFrame(tf);
-              setAppliedFilters(prev => ({ ...prev, timeFrame: tf }));
-            }}
-            crimeTypes={crimeTypes}
-            selectedCrimes={selectedCrimes}
-            onToggleCrime={toggleCrime}
-            onApply={applyFilters}
-            onReset={() => setSelectedCrimes([])}
-          />
-        </div>
-        <div className="col-span-4">
-          <CrimeTypeChart data={filteredCrimeChartData} loading={loadingCrimes} />
-        </div>
-        <div className="col-span-5">
-          <GeoChart data={filteredGeoChartData} title={tabConfig.chartTitle} loading={loadingGeo} />
-        </div>
-      </div>
-
-      {/* Geospatial Filter Panels and Date Trend */}
-      <div className="grid grid-cols-12 gap-4 mb-6">
-        <div className="col-span-3">
-          {isBeatsTab ? (
-            <div className="flex flex-col gap-4">
-              <GeoFilterPanel
-                filterLabel="District"
-                items={districtContextItems}
-                selectedIds={selectedDistricts}
-                onToggle={(id) => setSelectedDistricts(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
-                onApply={applyFilters}
-                onReset={() => setSelectedDistricts([])}
-                compact
-              />
-              <GeoFilterPanel
-                filterLabel="Beat"
-                items={mainFilterItems}
-                selectedIds={selectedBeats}
-                onToggle={(id) => setSelectedBeats(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
-                onApply={applyFilters}
-                onReset={() => setSelectedBeats([])}
-                compact
-              />
+  try {
+    return (
+      <>
+        <style>{`
+          .custom-tooltip {
+            background: #2d2d2d !important;
+            color: white !important;
+            border: 1px solid rgba(255,255,255,0.1) !important;
+            border-radius: 4px !important;
+            padding: 8px 12px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+            font-family: inherit !important;
+            opacity: 1 !important;
+          }
+          .custom-tooltip:before {
+            display: none !important;
+          }
+          .leaflet-tooltip-top:before, .leaflet-tooltip-bottom:before {
+            display: none !important;
+          }
+          .leaflet-popup-content-wrapper {
+            background: #2d2d2d !important;
+            color: white !important;
+            border-radius: 6px !important;
+            padding: 0 !important;
+          }
+          .leaflet-popup-tip {
+            background: #2d2d2d !important;
+          }
+        `}</style>
+  
+        {/* Platform Level KPI Cards (Synced with Crimes Page) */}
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          {[
+            { label: "Total Crimes", val: categoryKpis.total, color: "text-blue-900", bg: "bg-white" },
+            { label: "Violent Crimes", val: categoryKpis.violent, color: "text-red-500", bg: "bg-white" },
+            { label: "Property Crimes", val: categoryKpis.property, color: "text-amber-500", bg: "bg-white" },
+            { label: "Other Crimes", val: categoryKpis.other, color: "text-slate-800", bg: "bg-white" }
+          ].map((k, i) => (
+            <div key={i} className={`${k.bg} border border-slate-200 p-6 rounded-2xl shadow-sm text-center flex flex-col justify-center min-h-[140px]`}>
+              <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">{k.label}</div>
+              <div className={`text-3xl font-black ${k.color}`}>{k.val?.toLocaleString() || 0}</div>
+              <div className="text-[7px] text-slate-300 font-black uppercase mt-2 tracking-tighter">Active Forensic View</div>
             </div>
-          ) : (
-            <GeoFilterPanel
-              filterLabel={tabConfig.filterLabel}
-              items={mainFilterItems}
-              selectedIds={isDistrictsTab ? selectedDistricts : (isWardsTab ? selectedWards : [])}
-              onToggle={(id) => {
-                if (isDistrictsTab) setSelectedDistricts(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-                if (isWardsTab) setSelectedWards(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+          ))}
+        </div>
+  
+        {/* Visual Charts Row */}
+        <div className="grid grid-cols-12 gap-4 mb-6">
+          <div className="col-span-3">
+            <FiltersPanel
+              selectedTimeFrame={timeFrame}
+              onTimeFrameChange={(tf) => {
+                setTimeFrame(tf);
+                setAppliedFilters(prev => ({ ...prev, timeFrame: tf }));
               }}
+              crimeTypes={crimeTypes || []}
+              selectedCrimes={selectedCrimes || []}
+              onToggleCrime={toggleCrime}
               onApply={applyFilters}
-              onReset={() => {
-                if (isDistrictsTab) setSelectedDistricts([]);
-                if (isWardsTab) setSelectedWards([]);
-              }}
+              onReset={() => setSelectedCrimes([])}
             />
-          )}
+          </div>
+          <div className="col-span-4">
+            <CrimeTypeChart data={filteredCrimeChartData || []} loading={loadingCrimes} />
+          </div>
+          <div className="col-span-5">
+            <GeoChart data={filteredGeoChartData || []} title={tabConfig?.chartTitle || "Incidents"} loading={loadingGeo} />
+          </div>
         </div>
-        <div className="col-span-9">
-          <IncidentsByDateChart data={dateData} loading={loadingDate} />
+  
+        {/* Geospatial Filter Panels and Date Trend */}
+        <div className="grid grid-cols-12 gap-4 mb-6">
+          <div className="col-span-3">
+            {isBeatsTab ? (
+              <div className="flex flex-col gap-4">
+                <GeoFilterPanel
+                  filterLabel="District"
+                  items={districtContextItems || []}
+                  selectedIds={selectedDistricts || []}
+                  onToggle={(id) => setSelectedDistricts(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                  onApply={applyFilters}
+                  onReset={() => setSelectedDistricts([])}
+                  compact
+                />
+                <GeoFilterPanel
+                  filterLabel="Beat"
+                  items={mainFilterItems || []}
+                  selectedIds={selectedBeats || []}
+                  onToggle={(id) => setSelectedBeats(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                  onApply={applyFilters}
+                  onReset={() => setSelectedBeats([])}
+                  compact
+                />
+              </div>
+            ) : (
+              <GeoFilterPanel
+                filterLabel={tabConfig?.filterLabel || "Filter"}
+                items={mainFilterItems || []}
+                selectedIds={isDistrictsTab ? (selectedDistricts || []) : (isWardsTab ? (selectedWards || []) : [])}
+                onToggle={(id) => {
+                  if (isDistrictsTab) setSelectedDistricts(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+                  if (isWardsTab) setSelectedWards(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+                }}
+                onApply={applyFilters}
+                onReset={() => {
+                  if (isDistrictsTab) setSelectedDistricts([]);
+                  if (isWardsTab) setSelectedWards([]);
+                }}
+              />
+            )}
+          </div>
+          <div className="col-span-9">
+            <IncidentsByDateChart data={dateData || []} loading={loadingDate} />
+          </div>
         </div>
+  
+        {/* Map Content */}
+        <div className="grid grid-cols-12 gap-4 mb-6">
+          <div className="col-span-12">
+            <MapPanel
+              activeTab={activeTab}
+              countsMap={countsMap || new Map()}
+              kpiData={{ ...(kpiData || {}), total_incidents: calculatedTotalCount }}
+              bins={choroplethBins || []}
+              selectedIds={currentSelectedIds || []}
+            />
+          </div>
+        </div>
+      </>
+    );
+  } catch (err) {
+    console.error("Dashboard render crash:", err);
+    return (
+      <div className="p-20 text-center bg-gray-100 rounded-xl border border-gray-200">
+        <h2 className="text-xl font-bold text-gray-800 mb-2">Dashboard Error</h2>
+        <p className="text-sm text-gray-500">The Summary Maps view encountered a problem. Please try refreshing the page or switching tabs.</p>
+        <div className="mt-4 text-[10px] text-gray-400 font-mono">{err.message}</div>
       </div>
-
-      {/* Map Content */}
-      <div className="grid grid-cols-12 gap-4 mb-6">
-        <div className="col-span-12">
-          <MapPanel
-            activeTab={activeTab}
-            countsMap={countsMap}
-            kpiData={{ ...kpiData, total_incidents: calculatedTotalCount }}
-            bins={choroplethBins}
-            selectedIds={currentSelectedIds}
-          />
-        </div>
-      </div>
-    </>
-  );
+    );
+  }
 }
