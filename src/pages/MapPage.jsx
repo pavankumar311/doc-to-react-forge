@@ -11,7 +11,7 @@ import { HeatmapSkeleton } from "../components/Skeletons";
 import { useFilters } from "../contexts/FilterContext";
 import { AUTH_TOKEN, fetchPoliceStations, fetchPoliceBeats, fetchPrecincts } from "../services/api";
 
-const BASE_URL = "http://localhost:9000";
+const BASE_URL = "";
 const THEMATIC_COLORS = ["#fde68a", "#fbbf24", "#f59e0b", "#f97316", "#ef4444"];
 
 /* ── Inline Component: DateInput (Styled like Home Page) ──────────────── */

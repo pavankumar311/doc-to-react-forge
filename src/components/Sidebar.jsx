@@ -8,17 +8,9 @@ import {
 const navItems = [
   { label: "Summary Maps", icon: Layers, path: "/Summarymaps", minRole: "Viewer" },
   { label: "Crimes", icon: AlertTriangle, path: "/crimes", minRole: "Viewer" },
-  { label: "Dashboard", icon: LayoutDashboard, path: "/", minRole: "Viewer" },
-  //{ label: "Risk Heatmap", icon: MapPin, path: "/heatmap", minRole: "Viewer" },
-  { label: "Thematic Map", icon: Map, path: "/map", minRole: "Viewer" },
-  { label: "Network Graph", icon: Network, path: "/network", minRole: "Analyst" },
   { label: "Trend Analysis", icon: TrendingUp, path: "/trends", minRole: "Viewer" },
   { label: "Reports", icon: FileText, path: "/reports", minRole: "Viewer" },
   { label: "Chat Assistant", icon: MessageSquare, path: "/chat", minRole: "Analyst" },
-  { label: "Model Monitor", icon: Activity, path: "/models", minRole: "Data Scientist" },
-  { separator: true },
-  { label: "Settings", icon: Settings, path: "/settings", minRole: "Admin" },
-  { label: "Audit Log", icon: Shield, path: "/audit", minRole: "Admin" },
 ];
 
 export default function Sidebar() {

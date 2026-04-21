@@ -12,7 +12,7 @@ import { AUTH_TOKEN } from "../services/api";
 import { Calendar } from "../components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 
-const BASE_URL = "http://localhost:9000";
+const BASE_URL = "";
 
 const CATEGORY_COLORS = {
   violent: "#ef4444",

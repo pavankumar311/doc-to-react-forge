@@ -15,7 +15,7 @@ const defaultFilters = {
 const DEFAULT_DISTRICT_OPTIONS = ["District 7", "District 8", "District 11", "District 14"];
 const DEFAULT_CRIME_TYPE_OPTIONS = ["Theft", "Assault", "Burglary", "Battery", "Robbery"];
 const DEFAULT_RISK_TIER_OPTIONS = ["HIGH", "MED", "LOW"];
-const SUMMARY_ENDPOINT = "http://localhost:9000/api/v1/dashboard/summary";
+const SUMMARY_ENDPOINT = "/api/v1/dashboard/summary";
 const FILTER_STORAGE_KEY = "gscip.filters";
 const FILTER_PARAM_KEYS = ["dateFrom", "dateTo", "districts", "crimeTypes", "riskTiers"];
 
@@ -216,7 +216,7 @@ export function FilterProvider({ children }) {
   useEffect(() => {
     const loadOptions = async () => {
       try {
-        const res = await fetch("http://localhost:9000/api/v1/dashboard/filters", {
+        const res = await fetch("/api/v1/dashboard/filters", {
           headers: {
             Authorization: `Bearer ${AUTH_TOKEN}`, // adjust if needed
           },

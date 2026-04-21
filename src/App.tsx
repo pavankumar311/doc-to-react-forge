@@ -6,22 +6,13 @@ import GlobalHeader from "./components/GlobalHeader";
 import Sidebar from "./components/Sidebar";
 import FilterBar from "./components/FilterBar";
 import Dashboard from "./pages/Dashboard";
-import HeatmapPage from "./pages/HeatmapPage";
-import MapPage from "./pages/MapPage";
-import NetworkPage from "./pages/NetworkPage";
 import TrendsPage from "./pages/TrendsPage";
-import ModelsPage from "./pages/ModelsPage";
-import FairnessPage from "./pages/FairnessPage";
 import ReportsPage from "./pages/ReportsPage";
 import ChatPage from "./pages/ChatPage";
 import SummaryMapsPage from "./pages/SummaryMapsPage";
 import CrimesPage from "./pages/CrimesPage";
-import BlockDetailPage from "./pages/BlockDetailPage";
-import SettingsPage from "./pages/SettingsPage";
-import AuditPage from "./pages/AuditPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
-import NotFound from "./pages/NotFound";
 
 // Pages that should NOT show the global FilterBar
 const PAGES_WITHOUT_FILTERBAR = ["/Summarymaps", "/crimes"];
@@ -59,18 +50,10 @@ function AppRoutes() {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/Summarymaps" element={<SummaryMapsPage />} />
                 <Route path="/crimes" element={<CrimesPage />} />
-                <Route path="/heatmap" element={<HeatmapPage />} />
-                <Route path="/map" element={<MapPage />} />
-                <Route path="/network" element={<NetworkPage />} />
                 <Route path="/trends" element={<TrendsPage />} />
-                <Route path="/models" element={<ModelsPage />} />
-                <Route path="/models/fairness" element={<FairnessPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/chat" element={<ChatPage />} />
-                <Route path="/blocks/:blockId" element={<BlockDetailPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/audit" element={<AuditPage />} />
-                <Route path="*" element={<NotFound />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </main>
           </div>

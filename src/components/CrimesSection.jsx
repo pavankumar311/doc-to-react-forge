@@ -1,11 +1,14 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+// Forced HMR Refresh - v2
+
 import { MapContainer, TileLayer, GeoJSON, Popup, useMap, Marker, useMapEvents, Circle } from "react-leaflet";
 import L from "leaflet";
 import {
   Search, Calendar, Filter, Layers, Map as MapIcon,
   Loader2, Info, AlertCircle, ChevronLeft, ChevronRight,
-  ChevronDown, MapPin, Navigation
+  ChevronDown, MapPin, Navigation, Clock, Play, Pause, RotateCcw
 } from "lucide-react";
+import { Slider } from "./ui/slider";
 import {
   fetchSummaryKPIs,
   fetchMapIncidents,
@@ -18,8 +21,10 @@ import {
   fetchIncidentsByDate,
   fetchHourlyTrends,
   fetchPlatformTrend,
+  fetchPoliceStations,
   AUTH_TOKEN
 } from "../services/api";
+import { DownloadCloud, ShieldCheck } from "lucide-react";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -27,6 +32,32 @@ import {
 } from "recharts";
 
 // ── Constants & Helpers ──────────────────────────────────────────────────
+function timeFrameToDates(range, now) {
+  const to = new Date(now);
+  let from = new Date(now);
+  if (range === "Last 30 Days") from.setDate(now.getDate() - 30);
+  else if (range === "Last 90 Days") from.setDate(now.getDate() - 90);
+  return { dateFrom: from.toISOString().split("T")[0], dateTo: to.toISOString().split("T")[0] };
+}
+
+function downloadCSV(data, filename) {
+  if (!data || !data.length) return;
+  const headers = Object.keys(data[0]);
+  const csvContent = [
+    headers.join(","),
+    ...data.map((row) => headers.map((field) => `"${row[field] || ""}"`).join(",")),
+  ].join("\n");
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
 
 const CRIME_TYPES = {
   violent: { label: "Violent Crime (Index)", color: "#ef4444", items: ["Homicide", "Robbery", "Assault", "Battery", "Sexual Assault", "Kidnapping"] },
@@ -75,6 +106,44 @@ function createClusterIcon(count, color) {
   });
 }
 
+const DASHBOARD_MAP_STYLE = `
+  @keyframes pulse-ring {
+    0% { transform: scale(0.33); opacity: 1; }
+    80%, 100% { opacity: 0; }
+  }
+  @keyframes pulse-dot {
+    0% { transform: scale(0.8); }
+    50% { transform: scale(1); }
+    100% { transform: scale(0.8); }
+  }
+  .selected-incident-highlight {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .pulse-ring {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background-color: #ef4444;
+    animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+  }
+  .center-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background-color: #ef4444;
+    border: 2px solid white;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    z-index: 1;
+    animation: pulse-dot 1.5s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
+  }
+`;
+
 // ── Components ───────────────────────────────────────────────────────────
 
 function LoadingOverlay({ message = "Calibrating Forensic Map..." }) {
@@ -100,9 +169,9 @@ function DashboardFilter({ label, value, options, onChange }) {
 
 function KPIBox({ label, val, colorClass = "text-blue-900" }) {
   return (
-    <div className="flex flex-col items-center justify-center p-2 text-center">
-      <div className={`text-[14px] font-black ${colorClass}`}>{val?.toLocaleString() || 0}</div>
-      <div className="text-[7px] font-bold uppercase text-slate-400 leading-tight">{label}</div>
+    <div className="flex flex-col items-start justify-center p-3 border-r border-slate-100 last:border-r-0">
+      <div className={`text-[22px] font-black leading-tight ${colorClass}`}>{val?.toLocaleString() || 0}</div>
+      <div className="text-[8px] font-bold uppercase text-slate-400 mt-0.5 tracking-wide leading-tight">{label}</div>
     </div>
   );
 }
@@ -125,6 +194,64 @@ function IncidentListItem({ inc, active, onClick }) {
   );
 }
 
+// Premium ArcGIS-style wide incident card for the Crime Dashboard panel
+function IncidentListItemWide({ inc, active, onClick }) {
+  const { color } = getCategoryColor(inc?.category);
+  const formattedDate = inc?.date
+    ? new Date(inc.date).toLocaleString("en-US", { month: "numeric", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "No Date";
+
+  return (
+    <div
+      onClick={onClick}
+      className={`border-b border-slate-100 cursor-pointer transition-all group ${active ? "bg-blue-50 border-l-4 border-l-blue-600" : "bg-white border-l-4 border-l-transparent hover:bg-slate-50 hover:border-l-blue-300"
+        }`}
+      style={{ minHeight: "20%" }}
+    >
+      {/* Header row */}
+      <div className="px-4 pt-3 pb-1 flex items-start justify-between gap-2">
+        <div>
+          <div className="text-[11px] font-black uppercase text-slate-900 group-hover:text-blue-700 leading-tight">
+            {inc?.primary_type || "Unknown Crime"}
+          </div>
+          <div className="text-[9px] font-semibold text-slate-400 uppercase leading-tight mt-0.5 truncate max-w-[180px]">
+            {inc?.description || "—"}
+          </div>
+          <div className="text-[8px] font-bold text-blue-500 mt-1 truncate max-w-[200px]">
+            {formattedDate} &nbsp;
+            {inc?.location_description ? <span className="text-slate-400 uppercase">{inc.location_description}</span> : null}
+            {inc?.block_address ? <span className="text-blue-400"> of {inc.block_address}</span> : null}
+          </div>
+        </div>
+        <div className="w-2.5 h-2.5 rounded-full shrink-0 mt-1 border border-white shadow-sm" style={{ background: color }} />
+      </div>
+
+      {/* Detail rows */}
+      <div className="px-4 pb-3 space-y-0.5 mt-1">
+        <div className="flex items-center gap-1.5 text-[9px] text-slate-600">
+          <MapPin size={9} className="text-slate-400 shrink-0" />
+          <span className="font-semibold">Address</span>
+          <span className="text-slate-500 truncate">{inc?.block_address || "N/A"}</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-[9px] text-slate-600">
+          <Calendar size={9} className="text-blue-400 shrink-0" />
+          <span className="font-semibold">Date of Occurrence</span>
+          <span className="text-blue-600 font-bold">{formattedDate}</span>
+        </div>
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 pt-1 text-[8px] text-slate-400 font-bold uppercase tracking-wide">
+          <span>RD {inc?.case_number || "N/A"}</span>
+          {inc?.iucr && <span>| IUCR {inc.iucr}</span>}
+          {inc?.beat_num && <span>| Beat {inc.beat_num}</span>}
+          {inc?.ward && <span>| Ward {inc.ward}</span>}
+          {(inc?.community_area_name || inc?.community_area) && (
+            <span>| Community <span className="text-slate-600 uppercase">{inc.community_area_name || inc.community_area}</span></span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page Logic ──────────────────────────────────────────────────────
 
 export default function CrimesSection() {
@@ -134,6 +261,7 @@ export default function CrimesSection() {
   const [dashboardMode, setDashboardMode] = useState("Crime Statistics");
   const [dashboardSubTab, setDashboardSubTab] = useState("Crime Incidents");
   const [selectedIncident, setSelectedIncident] = useState(null);
+  const [incidentSearchTerm, setIncidentSearchTerm] = useState("");
 
   // Filters
   const [filters, setFilters] = useState({
@@ -170,6 +298,34 @@ export default function CrimesSection() {
   const [boundaries, setBoundaries] = useState({ ward: null, district: null, beat: null });
   const [districts, setDistricts] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showPolice, setShowPolice] = useState(false);
+  const [policeStations, setPoliceStations] = useState([]);
+  const [scrubValue, setScrubValue] = useState(100);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [dbMaxDate, setDbMaxDate] = useState(new Date());
+
+  // Derive scrubbed DateTo
+  const scrubbedDateTo = useMemo(() => {
+    // Sync with database max date to avoid empty timeline scrubbing
+    const { dateFrom, dateTo } = timeFrameToDates(filters.dateRange, dbMaxDate);
+    const from = new Date(dateFrom);
+    const to = new Date(dateTo);
+    const totalDays = Math.max(1, Math.round((to - from) / 86400000));
+    const currentDays = Math.round((scrubValue / 100) * totalDays);
+    const scrubbed = new Date(from.getTime() + currentDays * 86400000);
+    return scrubbed.toISOString().split("T")[0];
+  }, [filters.dateRange, scrubValue, dbMaxDate]);
+
+  // Playback timer
+  useEffect(() => {
+    let interval;
+    if (isPlaying) {
+      interval = setInterval(() => {
+        setScrubValue(v => (v >= 100 ? 0 : v + 1));
+      }, 400);
+    }
+    return () => clearInterval(interval);
+  }, [isPlaying]);
 
   // Initial Data Load
   useEffect(() => {
@@ -204,6 +360,29 @@ export default function CrimesSection() {
       } catch (err) { console.error("Boundary init failed:", err); }
     }
     init();
+  }, []);
+
+  useEffect(() => {
+    if (showPolice && policeStations.length === 0) {
+      fetchPoliceStations().then(data => {
+        setPoliceStations(Array.isArray(data) ? data : (data.features || []));
+      }).catch(e => console.error("Failed to load police stations", e));
+    }
+  }, [showPolice]);
+
+  // Sync with backend calendar to avoid "empty future" data discrepancy
+  useEffect(() => {
+    async function sync() {
+      try {
+        const meta = await fetchFilterOptions();
+        if (meta?.date_range?.max_date) {
+          setDbMaxDate(new Date(meta.date_range.max_date));
+        }
+      } catch (e) {
+        console.warn("CrimesSection: Calendar sync failed:", e);
+      }
+    }
+    sync();
   }, []);
 
   // Search Handler for Find Crime Near
@@ -294,13 +473,9 @@ export default function CrimesSection() {
         dateFrom = filters.customFrom;
         dateTo = filters.customTo;
       } else {
-        try {
-          const filterMeta = await fetchFilterOptions();
-          if (filterMeta?.date_range?.max_date) dateToObj = new Date(filterMeta.date_range.max_date);
-        } catch (e) { console.warn("Calendar sync failed, using system clock:", e); }
-        dateTo = dateToObj.toISOString().split("T")[0];
-        const intervalDays = filters.dateRange === "Last 30 Days" ? 30 : 90;
-        dateFrom = new Date(dateToObj.getTime() - intervalDays * 86400000).toISOString().split("T")[0];
+        dateTo = scrubbedDateTo;
+        const intervalDays = filters.dateRange === "Last 7 Days" ? 7 : filters.dateRange === "Last 30 Days" ? 30 : 90;
+        dateFrom = new Date(new Date(dateTo).getTime() - intervalDays * 86400000).toISOString().split("T")[0];
       }
 
       // Context Filtering Logic
@@ -372,7 +547,7 @@ export default function CrimesSection() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { loadData(); }, [filters.dateRange, filters.district, filters.customFrom, filters.customTo, findNear.selectedResult]);
+  useEffect(() => { loadData(); }, [filters.dateRange, filters.district, filters.customFrom, filters.customTo, findNear.selectedResult, scrubbedDateTo]);
 
   const reactiveKpis = useMemo(() => {
     const v = filters.crimeToggles.violent ? kpis.violent : 0;
@@ -520,6 +695,21 @@ export default function CrimesSection() {
                     </div>
                   </div>
                 ))}
+
+                <div className="h-px bg-slate-50 my-2" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <ShieldCheck size={10} className="text-blue-500" />
+                    <span className={`text-[10px] font-black uppercase ${showPolice ? 'text-slate-800' : 'text-slate-400'}`}>Police Stations</span>
+                  </div>
+                  <div
+                    onClick={() => setShowPolice(!showPolice)}
+                    className={`w-10 h-5 rounded-full relative transition-all cursor-pointer ${showPolice ? 'bg-blue-600 shadow-inner' : 'bg-slate-200'}`}
+                  >
+                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all shadow-sm ${showPolice ? 'left-6' : 'left-1'}`} />
+                  </div>
+                </div>
+
               </div>
 
               <div className="h-px bg-slate-50" />
@@ -628,6 +818,15 @@ export default function CrimesSection() {
             </div>
 
             <div className="col-span-7 bg-white rounded-2xl border border-slate-200 overflow-hidden relative shadow-sm h-[600px]">
+              <div className="absolute top-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-sm border-b border-slate-100 z-[1000] flex flex-row items-center justify-between px-6">
+                <div className="flex flex-col gap-0.5">
+                  <h3 className="text-xl font-bold tracking-tight text-slate-800">Forensic Map View</h3>
+                  <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                    <Clock size={10} className="text-blue-500" />
+                    <span>Anchored to latest record: <span className="text-blue-600 underline decoration-blue-200">{dbMaxDate.toISOString().split("T")[0]}</span></span>
+                  </div>
+                </div>
+              </div>
               <MapContainer center={[41.8781, -87.6298]} zoom={11} className="h-full w-full" zoomControl={false}>
                 <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
                 <ZoomTracker setZoom={setZoom} />
@@ -678,6 +877,33 @@ export default function CrimesSection() {
                     </Popup>
                   </Marker>
                 ))}
+
+                {showPolice && policeStations?.map((ps, idx) => {
+                  if (!ps.latitude || !ps.longitude) return null;
+                  const distNum = ps.district || ps.district_id || ps.dist || ps.id || "N/A";
+                  return (
+                    <Marker
+                      key={`police-${idx}`}
+                      position={[ps.latitude, ps.longitude]}
+                      icon={L.divIcon({
+                        html: `<div style="font-size: 24px; cursor: pointer;" title="Police Station">👮</div>`,
+                        className: "police-emoji-marker",
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15],
+                      })}
+                    >
+                      <Popup>
+                        <div className="p-1">
+                          <h4 className="font-bold text-[10px] border-b mb-2 pb-1 text-slate-800 uppercase tracking-widest">CPD Precinct Details</h4>
+                          <p className="text-[9px] uppercase font-black"><b>District:</b> {distNum}</p>
+                          <p className="text-[9px] uppercase font-bold text-slate-500"><b>Address:</b> {ps.address || ps.address_text || "N/A"}</p>
+                          <p className="text-[9px] uppercase font-bold text-slate-500"><b>Name:</b> {ps.station_name || ps.name || (distNum !== "N/A" ? `District ${distNum}` : "Unknown Station")}</p>
+                          {ps.phone && <p className="text-[9px] uppercase font-bold text-slate-500"><b>Phone:</b> {ps.phone}</p>}
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
               </MapContainer>
             </div>
 
@@ -701,10 +927,12 @@ export default function CrimesSection() {
         </>
       ) : (
         /* CRIME DASHBOARD LAYOUT */
-        <div className="flex flex-col gap-4 animate-in fade-in duration-500">
-          <div className="flex flex-col min-h-[850px] bg-slate-50 rounded-lg overflow-hidden border border-slate-200">
-          <div className="bg-white border-b border-slate-100 flex items-center justify-between px-6 py-4 shadow-sm z-10 w-full overflow-x-auto custom-scrollbar">
-            <div className="text-[15px] font-extrabold text-slate-800 uppercase tracking-tight shrink-0 mr-8">Crime and Strategic Plans</div>
+        <div className="flex flex-col gap-3 animate-in fade-in duration-500" style={{ height: 'calc(100vh - 220px)', minHeight: 700 }}>
+          <style>{DASHBOARD_MAP_STYLE}</style>
+
+          {/* Top filter bar */}
+          <div className="bg-white border border-slate-200 rounded-xl flex items-center justify-between px-6 py-3 shadow-sm z-10 w-full overflow-x-auto shrink-0">
+            <div className="text-[15px] font-extrabold text-slate-800 tracking-tight shrink-0 mr-8">Crime and Strategic Plans</div>
             <div className="flex items-center gap-6 shrink-0">
               <DashboardFilter label="Police District" value={filters.district} options={districts} onChange={v => setFilters({ ...filters, district: v })} />
               <DashboardFilter label="Police Beat" value={filters.beat} options={[]} onChange={v => setFilters({ ...filters, beat: v })} />
@@ -714,7 +942,7 @@ export default function CrimesSection() {
               <div className="flex flex-col min-w-[100px]">
                 <span className="text-[8px] text-slate-400 font-bold uppercase mb-1">Date</span>
                 <select value={filters.dateRange} onChange={e => setFilters({ ...filters, dateRange: e.target.value })} className="bg-transparent text-[10px] font-black uppercase outline-none cursor-pointer">
-                  <option value="Last 2 Weeks">Last 2 Weeks</option>
+                  <option value="Last 7 Days">Last 7 Days</option>
                   <option value="Last 30 Days">Last 30 Days</option>
                   <option value="Last 90 Days">Last 90 Days</option>
                   <option value="Custom">Custom</option>
@@ -723,33 +951,103 @@ export default function CrimesSection() {
             </div>
           </div>
 
-          <div className="flex-1 grid grid-cols-12 overflow-hidden h-full">
-            <div className="col-span-3 bg-white border-r border-slate-200 flex flex-col h-full z-10">
-              <div className="p-4 grid grid-cols-3 gap-1 border-b border-slate-50 shadow-sm">
-                <KPIBox label="Total Crime" val={kpis?.total} colorClass="text-blue-900" />
-                <KPIBox label="Violent Crime" val={kpis?.violent} colorClass="text-red-500" />
-                <KPIBox label="Property Crime" val={kpis?.property} colorClass="text-amber-500" />
+          {/* Main body */}
+          <div className="flex-1 grid grid-cols-12 gap-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm min-h-0">
+
+            {/* ── LEFT PANEL ── */}
+            <div className="col-span-3 border-r border-slate-200 flex flex-col h-full min-h-0">
+
+              {/* Large KPI row */}
+              <div className="px-5 pt-5 pb-4 border-b border-slate-100 shrink-0">
+                <div className="grid grid-cols-3 gap-0">
+                  <KPIBox label="Total Crime" val={kpis?.total} colorClass="text-blue-900" />
+                  <KPIBox label="Violent Crime" val={kpis?.violent} colorClass="text-red-500" />
+                  <KPIBox label="Property Crime" val={kpis?.property} colorClass="text-amber-500" />
+                </div>
               </div>
-              <div className="flex-1 flex flex-col overflow-hidden min-h-0 bg-[#f8fafc]">
-                <div className="flex border-b border-slate-200 bg-slate-100 shrink-0">
-                  {["Crime Incidents", "Strategic Plans"].map(sub => (
-                    <div key={sub} onClick={() => setDashboardSubTab(sub)} className={`flex-1 text-center py-2.5 text-[9px] font-black uppercase cursor-pointer transition-all border-b-2 ${dashboardSubTab === sub ? "border-blue-600 text-blue-600 bg-white" : "border-transparent text-slate-500 hover:text-slate-700"}`}>{sub}</div>
-                  ))}
+
+              {/* Crime Incidents heading + subtitle */}
+              <div className="px-5 pt-4 pb-2 shrink-0">
+                <div className="text-[13px] font-black text-slate-800 tracking-tight">Crime Incidents</div>
+                <div className="text-[9px] font-semibold text-red-500 mt-0.5 italic">Most recent data of incidents occured</div>
+              </div>
+
+              {/* Search */}
+              <div className="px-4 pb-2 shrink-0">
+                <div className="relative">
+                  <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" />
+                  <input
+                    type="text"
+                    placeholder="Search incidents..."
+                    value={incidentSearchTerm}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-semibold text-slate-600 pl-8 pr-3 py-2 outline-none focus:ring-2 focus:ring-blue-300 placeholder:text-slate-300 transition"
+                    onChange={e => setIncidentSearchTerm(e.target.value)}
+                    id="incident-search-input"
+                  />
                 </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
-                  {dashboardSubTab === "Crime Incidents" ? (
-                    incidents.length > 0 ? incidents.slice(0, 50).map((inc, i) => <IncidentListItem key={i} inc={inc} active={selectedIncident?.id === inc.id} onClick={() => setSelectedIncident(inc)} />) : <div className="text-center py-10 text-[9px] font-black text-slate-400 uppercase">No recent crimes</div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center p-12 opacity-40 text-center"><Loader2 className="animate-spin text-blue-600 mb-2" size={18} /><span className="text-[9px] font-black text-slate-800 uppercase">Strategic Planning Module Offline</span></div>
-                  )}
-                </div>
+              </div>
+
+              {/* Scrollable incident list — 5 items visible */}
+              <div
+                className="flex-1 overflow-y-auto min-h-0"
+                style={{ scrollSnapType: 'y mandatory' }}
+              >
+                {dashboardSubTab === "Crime Incidents" ? (
+                  (() => {
+                    const filtered = incidents.filter(inc =>
+                      !incidentSearchTerm ||
+                      (inc.primary_type || "").toLowerCase().includes(incidentSearchTerm.toLowerCase()) ||
+                      (inc.block_address || "").toLowerCase().includes(incidentSearchTerm.toLowerCase()) ||
+                      (inc.case_number || "").toLowerCase().includes(incidentSearchTerm.toLowerCase())
+                    );
+
+                    return filtered.length > 0 ? (
+                      filtered.slice(0, 100).map((inc, i) => (
+                        <div key={i} style={{ scrollSnapAlign: 'start' }}>
+                          <IncidentListItemWide
+                            inc={inc}
+                            active={selectedIncident?.id === inc.id}
+                            onClick={() => setSelectedIncident(inc)}
+                          />
+                        </div>
+                      ))
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full text-center py-10">
+                        <div className="text-[9px] font-black text-slate-400 uppercase">No crimes match search</div>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full p-12 opacity-40 text-center">
+                    <Loader2 className="animate-spin text-blue-600 mb-2" size={18} />
+                    <span className="text-[9px] font-black text-slate-800 uppercase">Strategic Planning Module Offline</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Sub-tabs pinned to bottom */}
+              <div className="flex border-t border-slate-200 bg-white shrink-0">
+                {["Crime Incidents", "Strategic Plans"].map(sub => (
+                  <button
+                    key={sub}
+                    onClick={() => setDashboardSubTab(sub)}
+                    className={`flex-1 text-center py-3 text-[9px] font-black uppercase cursor-pointer transition-all border-t-2 ${dashboardSubTab === sub
+                      ? "border-blue-600 text-blue-600 bg-blue-50/50"
+                      : "border-transparent text-slate-400 hover:text-slate-700 hover:bg-slate-50"
+                      }`}
+                  >
+                    {sub}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <div className="col-span-9 flex flex-col relative bg-slate-50 shadow-inner h-full">
-              <div className="flex-1 relative overflow-hidden">
+            {/* ── RIGHT PANEL ── */}
+            <div className="col-span-9 flex flex-col h-full min-h-0 bg-slate-50">
+              {/* Content area — map or statistics */}
+              <div className="flex-1 relative overflow-hidden min-h-0">
                 {dashboardMode === "Crime Statistics" ? (
-                  <div className="h-full overflow-y-auto custom-scrollbar p-6 bg-[#f1f5f9]">
+                  <div className="h-full overflow-y-auto p-6" style={{ scrollbarWidth: 'thin' }}>
                     <CrimeDashboard
                       data={crimeTypeData}
                       highlights={kpis}
@@ -762,35 +1060,98 @@ export default function CrimesSection() {
                     />
                   </div>
                 ) : (
-                  <MapContainer center={selectedIncident ? [selectedIncident.lat, selectedIncident.lng] : [41.8781, -87.6298]} zoom={selectedIncident ? 16 : 11} className="h-full w-full z-0" zoomControl={true}>
-                    <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-                    <ZoomTracker setZoom={setZoom} />
-                    <MapAutoScaler incidents={selectedIncident ? [selectedIncident] : incidents} />
-                    {(!selectedIncident ? spatialClusters : [
-                      { lat: selectedIncident.lat, lng: selectedIncident.lng, count: 1, category: selectedIncident.category, incidents: [selectedIncident] }
-                    ]).map((c, idx) => (
-                      <Marker
-                        key={`${idx}`}
-                        position={[c.lat, c.lng]}
-                        icon={createClusterIcon(c.count, getCategoryColor(c.category).color)}
-                      >
-                        <Popup minWidth={300} className="forensic-popup">
-                          <IncidentPopup inc={c.incidents[0]} count={c.count} clusterIncidents={c.incidents} />
-                        </Popup>
-                      </Marker>
-                    ))}
-                    {selectedIncident && <><Circle center={[selectedIncident.lat, selectedIncident.lng]} radius={150} pathOptions={{ color: "#ef4444", fillColor: "#ef4444", fillOpacity: 0.15, dashArray: '5,5' }} /><FindNearFlyTo lat={selectedIncident.lat} lng={selectedIncident.lng} /></>}
-                  </MapContainer>
+                  <>
+                    <MapContainer
+                      center={selectedIncident ? [selectedIncident.lat, selectedIncident.lng] : [41.8781, -87.6298]}
+                      zoom={selectedIncident ? 16 : 11}
+                      className="h-full w-full z-0"
+                      zoomControl={true}
+                    >
+                      <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+                      <ZoomTracker setZoom={setZoom} />
+                      <MapAutoScaler incidents={incidents} selectedIncident={selectedIncident} />
+
+                      {/* Display All Boundaries by Default */}
+                      {boundaries.district && (
+                        <GeoJSON
+                          data={boundaries.district}
+                          style={{ color: "#272727", weight: 2, opacity: 0.6, fillColor: "transparent" }}
+                        />
+                      )}
+                      {boundaries.beat && (
+                        <GeoJSON
+                          data={boundaries.beat}
+                          style={{ color: "#0ea5e9", weight: 1, opacity: 0.4, dashArray: "5, 10", fillColor: "transparent" }}
+                        />
+                      )}
+                      {boundaries.ward && (
+                        <GeoJSON
+                          data={boundaries.ward}
+                          style={{ color: "#7dd3fc", weight: 0.8, opacity: 0.3, fillColor: "transparent" }}
+                        />
+                      )}
+
+                      {/* Display All Incidents (Clusters) */}
+                      {spatialClusters.map((c, idx) => (
+                        <Marker
+                          key={`${idx}`}
+                          position={[c.lat, c.lng]}
+                          icon={createClusterIcon(c.count, getCategoryColor(c.category).color)}
+                        >
+                          <Popup minWidth={300} className="forensic-popup">
+                            <IncidentPopup inc={c.incidents[0]} count={c.count} clusterIncidents={c.incidents} />
+                          </Popup>
+                        </Marker>
+                      ))}
+
+
+
+                      {/* Highlight Selected Incident */}
+                      {selectedIncident && (
+                        <>
+                          <Marker
+                            position={[selectedIncident.lat, selectedIncident.lng]}
+                            icon={L.divIcon({
+                              html: `
+                                <div class="selected-incident-highlight">
+                                  <div class="pulse-ring"></div>
+                                  <div class="center-dot" style="background: ${getCategoryColor(selectedIncident.category).color}"></div>
+                                </div>
+                              `,
+                              className: "selected-marker",
+                              iconSize: [40, 40],
+                              iconAnchor: [20, 20]
+                            })}
+                            zIndexOffset={1000}
+                          >
+                            <Popup minWidth={300} className="forensic-popup">
+                              <IncidentPopup inc={selectedIncident} count={1} />
+                            </Popup>
+                          </Marker>
+                          <Circle
+                            center={[selectedIncident.lat, selectedIncident.lng]}
+                            radius={150}
+                            pathOptions={{ color: "#ef4444", fillColor: "#ef4444", fillOpacity: 0.1, dashArray: '5,5' }}
+                          />
+                          <FindNearFlyTo lat={selectedIncident.lat} lng={selectedIncident.lng} />
+                        </>
+                      )}
+                    </MapContainer>
+
+
+                  </>
                 )}
               </div>
-              <div className="h-14 bg-white border-t border-slate-200 flex flex-row items-center justify-center px-6 gap-4 shadow-sm shrink-0">
+
+              {/* Bottom toggle: Crime Map / Crime Statistics */}
+              <div className="h-14 bg-white border-t border-slate-200 flex items-center justify-center gap-4 px-6 shrink-0">
                 {["Crime Map", "Crime Statistics"].map(m => (
                   <button
                     key={m}
                     onClick={() => setDashboardMode(m)}
-                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${dashboardMode === m
+                    className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${dashboardMode === m
                       ? "bg-blue-600 text-white shadow-md shadow-blue-200"
-                      : "bg-white text-slate-400 border border-slate-200 hover:border-blue-400"
+                      : "bg-white text-slate-400 border border-slate-200 hover:border-blue-400 hover:text-slate-700"
                       }`}
                   >
                     {m}
@@ -799,19 +1160,18 @@ export default function CrimesSection() {
               </div>
             </div>
           </div>
+
+          {/* Action Buttons — outside and below the panel */}
+          <div className="flex items-center justify-end gap-4 shrink-0">
+            <button className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-800 transition-all shadow-sm flex items-center gap-2">
+              <Layers size={14} /> Generate PDF Report
+            </button>
+            <button className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-white bg-blue-600 border border-transparent hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-200 transition-all shadow-md shadow-blue-200 flex items-center gap-2">
+              <Navigation size={14} /> Launch Strategic Planner
+            </button>
+          </div>
         </div>
-        
-        {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-4 mt-2">
-          <button className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-800 transition-all shadow-sm flex items-center gap-2">
-            <Layers size={14} /> Generate PDF Report
-          </button>
-          <button className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-white bg-blue-600 border border-transparent hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-200 transition-all shadow-md shadow-blue-200 flex items-center gap-2">
-            <Navigation size={14} /> Launch Strategic Planner
-          </button>
-        </div>
-      </div>
-    )}
+      )}
     </div>
   );
 }
@@ -992,7 +1352,7 @@ function IncidentPopup({ inc, count, clusterIncidents = [] }) {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[8px] font-black text-slate-400 uppercase">Community</span>
-              <span className="text-[10px] font-black text-slate-800 truncate max-w-[80px]">AUSTIN</span>
+              <span className="text-[10px] font-black text-slate-800 truncate max-w-[80px] uppercase">{currentInc.community_area_name || currentInc.community_area || 'N/A'}</span>
             </div>
           </div>
         </div>
@@ -1024,7 +1384,12 @@ function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanki
       <div className="grid grid-cols-3 gap-6">
         {/* Row 1 */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[280px]">
-          <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-6 border-b border-slate-50 pb-2">Top 10 Crimes ({districtName})</h4>
+          <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-2">
+            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Top 10 Crimes ({districtName})</h4>
+            <button onClick={() => downloadCSV(barData, `top_crimes_${districtName}.csv`)} className="p-1 hover:bg-slate-100 rounded text-slate-400 transition-colors" title="Export CSV">
+              <DownloadCloud size={14} />
+            </button>
+          </div>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barData} layout="vertical">
@@ -1040,7 +1405,12 @@ function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanki
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[280px]">
-          <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-6 border-b border-slate-50 pb-2">Crime by Day of Week</h4>
+          <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-2">
+            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Crime by Day of Week</h4>
+            <button onClick={() => downloadCSV(dowData, "crime_by_dow.csv")} className="p-1 hover:bg-slate-100 rounded text-slate-400 transition-colors" title="Export CSV">
+              <DownloadCloud size={14} />
+            </button>
+          </div>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dowData}>
@@ -1055,7 +1425,12 @@ function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanki
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[280px]">
-          <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-6 border-b border-slate-50 pb-2">Crime by Beat (Top 10)</h4>
+          <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-2">
+            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Crime by Beat (Top 10)</h4>
+            <button onClick={() => downloadCSV(beatRanking.slice(0, 10), "crime_by_beat.csv")} className="p-1 hover:bg-slate-100 rounded text-slate-400 transition-colors" title="Export CSV">
+              <DownloadCloud size={14} />
+            </button>
+          </div>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={beatRanking.slice(0, 10)} layout="vertical">
@@ -1070,7 +1445,12 @@ function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanki
 
         {/* Row 2 */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm h-[280px] flex flex-col">
-          <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-6 border-b border-slate-50 pb-2">Crime by Time of Day</h4>
+          <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-2">
+            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Crime by Time of Day</h4>
+            <button onClick={() => downloadCSV(hourlyData, "crime_by_hour.csv")} className="p-1 hover:bg-slate-100 rounded text-slate-400 transition-colors" title="Export CSV">
+              <DownloadCloud size={14} />
+            </button>
+          </div>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={hourlyData}>
@@ -1085,7 +1465,12 @@ function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanki
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm h-[280px] flex flex-col">
-          <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-6 border-b border-slate-50 pb-2">Crime by Ward (Top 10)</h4>
+          <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-2">
+            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Crime by Ward (Top 10)</h4>
+            <button onClick={() => downloadCSV(wardRanking.slice(0, 10), "crime_by_ward.csv")} className="p-1 hover:bg-slate-100 rounded text-slate-400 transition-colors" title="Export CSV">
+              <DownloadCloud size={14} />
+            </button>
+          </div>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={wardRanking.slice(0, 10)} layout="vertical">
@@ -1099,7 +1484,12 @@ function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanki
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[280px]">
-          <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-6 border-b border-slate-50 pb-2">Categorical Split</h4>
+          <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-2">
+            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Categorical Split</h4>
+            <button onClick={() => downloadCSV(pieData, "crime_categories.csv")} className="p-1 hover:bg-slate-100 rounded text-slate-400 transition-colors" title="Export CSV">
+              <DownloadCloud size={14} />
+            </button>
+          </div>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -1115,7 +1505,12 @@ function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanki
       </div>
 
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm h-[300px] flex flex-col">
-        <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest mb-6 border-b border-slate-50 pb-2">Crime over Time (Trend Analytics)</h4>
+        <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-2">
+          <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Crime over Time (Trend Analytics)</h4>
+          <button onClick={() => downloadCSV(trendData, "crime_trends.csv")} className="p-1 hover:bg-slate-100 rounded text-slate-400 transition-colors" title="Export CSV">
+            <DownloadCloud size={14} />
+          </button>
+        </div>
         <div className="flex-1">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={trendData}>
@@ -1149,13 +1544,15 @@ function ZoomTracker({ setZoom }) {
   return null;
 }
 
-function MapAutoScaler({ incidents }) {
+function MapAutoScaler({ incidents, selectedIncident }) {
   const map = useMap();
   useEffect(() => {
-    if (incidents && incidents.length > 0) {
+    if (selectedIncident) {
+      map.flyTo([selectedIncident.lat, selectedIncident.lng], 16, { duration: 1.5 });
+    } else if (incidents && incidents.length > 0) {
       const valid = incidents.filter(i => i.lat > 41.6 && i.lat < 42.1 && i.lng < -87.5 && i.lng > -87.9);
       if (valid.length > 0) map.fitBounds(L.latLngBounds(valid.map(i => [i.lat, i.lng])), { padding: [50, 50], maxZoom: 13 });
     }
-  }, [incidents, map]);
+  }, [incidents, selectedIncident, map]);
   return null;
 }

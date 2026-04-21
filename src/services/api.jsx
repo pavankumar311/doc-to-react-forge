@@ -34,11 +34,11 @@ import {
 // ── Configuration ──────────────────────────────────────────────────────
 // const API_BASE_URL = "https://api.gscip.gov/v1";
 // const API_KEY = process.env.REACT_APP_GSCIP_API_KEY || "";
-const DASHBOARD_API_BASE = "http://localhost:9000/api/v1/dashboard";
-const REPORTS_API_BASE = "http://localhost:9000/api/v1/reports";
-const CHAT_API_BASE = "http://localhost:9000/api/v1/chat";
+const DASHBOARD_API_BASE = "/api/v1/dashboard";
+const REPORTS_API_BASE = "/api/v1/reports";
+const CHAT_API_BASE = "/api/v1/chat";
 export const AUTH_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NjY2OTU4MiwgImV4cCI6IDE3NzY3NTU5ODJ9.Lko6SigN2JCypHI6SJO6di8_SYViAAO8-YkSdkbgQUs";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3Njc1MTcwMSwgImV4cCI6IDE3NzY4MzgxMDF9.yTl3ffvcPalYaETf3VQSh7wGGZTjTXLgD-RWdBm0Ezs";
 
 function normalizeDistrictId(value) {
   if (value == null) return "";
