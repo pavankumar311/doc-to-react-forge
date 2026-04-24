@@ -20,6 +20,10 @@ import {
   fetchDistrictBoundaries,
   fetchPoliceBeats,
   fetchPoliceStations,
+  fetchHospitals,
+  fetchSchools,
+  fetchFireStations,
+  fetchMapIncidents,
 } from "../services/api";
 
 // ── CSV Helpers ─────────────────────────────────────────────────────────
@@ -113,11 +117,15 @@ const TAB_LABELS = {
 function buildBins(items) {
   if (!items || items.length === 0) return [];
   const counts = items.map((i) => i.crime_count).sort((a, b) => a - b);
-  const max = counts[counts.length - 1];
-  const min = counts[0];
+  const max = counts[counts.length - 1] || 1;
+  const min = counts[0] || 0;
   const range = max - min || 1;
   const step = range / 5;
-  const COLORS = ["#faf1d2", "#b9d4c6", "#77a9be", "#547e9b", "#2d4464"];
+
+  // Premium Blue Palette
+  // Heat Map Scale (Cream to Red / ColorBrewer YlOrRd)
+  const COLORS = ["#ffffb2", "#fecc5c", "#fd8d3c", "#f03b20", "#bd0026"];
+
   return COLORS.map((color, i) => ({
     min: min + step * i,
     max: i === 4 ? Infinity : min + step * (i + 1),
@@ -159,6 +167,9 @@ function FiltersPanel({
   crimeTypes, selectedCrimes, onToggleCrime,
   onApply, onReset,
   showPolice, onTogglePolice,
+  showHospitals, onToggleHospitals,
+  showSchools, onToggleSchools,
+  showFireStations, onToggleFireStations,
   showHeatmap, onToggleHeatmap
 }) {
   return (
@@ -189,6 +200,42 @@ function FiltersPanel({
           <div className="relative inline-flex items-center">
             <input type="checkbox" checked={showPolice} onChange={onTogglePolice} className="sr-only peer" />
             <div className="w-9 h-5 rounded-full peer-checked:bg-blue-600 bg-gray-300 transition-colors" />
+            <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+          </div>
+        </label>
+
+        <label className="flex items-center justify-between cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors" style={{ border: "1px solid var(--color-border)" }}>
+          <div className="flex items-center gap-2">
+            <span className="text-base">🏥</span>
+            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Hospitals</span>
+          </div>
+          <div className="relative inline-flex items-center">
+            <input type="checkbox" checked={showHospitals} onChange={onToggleHospitals} className="sr-only peer" />
+            <div className="w-9 h-5 rounded-full peer-checked:bg-emerald-600 bg-gray-300 transition-colors" />
+            <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+          </div>
+        </label>
+
+        <label className="flex items-center justify-between cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors" style={{ border: "1px solid var(--color-border)" }}>
+          <div className="flex items-center gap-2">
+            <span className="text-base">🏫</span>
+            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Schools</span>
+          </div>
+          <div className="relative inline-flex items-center">
+            <input type="checkbox" checked={showSchools} onChange={onToggleSchools} className="sr-only peer" />
+            <div className="w-9 h-5 rounded-full peer-checked:bg-indigo-600 bg-gray-300 transition-colors" />
+            <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+          </div>
+        </label>
+
+        <label className="flex items-center justify-between cursor-pointer p-2 rounded-md hover:bg-gray-50 transition-colors" style={{ border: "1px solid var(--color-border)" }}>
+          <div className="flex items-center gap-2">
+            <span className="text-base">🚒</span>
+            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Fire Stations</span>
+          </div>
+          <div className="relative inline-flex items-center">
+            <input type="checkbox" checked={showFireStations} onChange={onToggleFireStations} className="sr-only peer" />
+            <div className="w-9 h-5 rounded-full peer-checked:bg-red-600 bg-gray-300 transition-colors" />
             <div className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white transition-transform peer-checked:translate-x-4" />
           </div>
         </label>
@@ -296,7 +343,7 @@ function FiltersPanel({
   );
 }
 
-function CrimeTypeChart({ data, loading }) {
+function CrimeTypeChart({ data, loading, isFiltered }) {
   return (
     <GscipCard>
       <div className="flex items-center justify-between mb-4">
@@ -314,19 +361,27 @@ function CrimeTypeChart({ data, loading }) {
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={320}>
-          <BarChart data={data} layout="vertical" margin={{ left: 10, right: 50, top: 5, bottom: 5 }}>
-            <XAxis type="number" tick={{ fontSize: 11, fill: "var(--color-text-muted)" }} axisLine={{ stroke: "var(--color-border)" }} tickLine={false} />
-            <YAxis
-              type="category"
+          <BarChart data={data} margin={{ left: 0, right: 0, top: 10, bottom: 60 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
+            <XAxis
               dataKey="name"
-              width={130}
-              tick={{ fontSize: 10, fill: "var(--color-text-secondary)" }}
+              interval={0}
+              tick={{ fontSize: 9, fill: "var(--color-text-secondary)", fontWeight: 700 }}
+              axisLine={{ stroke: "var(--color-border)" }}
+              tickLine={false}
+              angle={-40}
+              textAnchor="end"
+              height={70}
+              tickFormatter={(v) => v.length > 15 ? v.slice(0, 14) + ".." : v}
+            />
+            <YAxis
+              tick={{ fontSize: 10, fill: "var(--color-text-muted)" }}
               axisLine={false}
               tickLine={false}
-              tickFormatter={(v) => v.length > 18 ? v.slice(0, 17) + "…" : v}
+              tickFormatter={(v) => v.toLocaleString()}
             />
             <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
-            <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={22} label={{ position: "right", fontSize: 11, fill: "var(--color-text-primary)", formatter: (v) => v.toLocaleString() }}>
+            <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={28}>
               {data.map((entry, i) => (
                 <Cell key={i} fill={entry.color || BAR_COLOR} />
               ))}
@@ -334,12 +389,14 @@ function CrimeTypeChart({ data, loading }) {
           </BarChart>
         </ResponsiveContainer>
       )}
-      <p className="text-center text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>Reported Incidents</p>
+      <p className="text-center text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>
+        {isFiltered ? "" : "Top 10 "}incidents by crime type
+      </p>
     </GscipCard>
   );
 }
 
-function GeoChart({ data, title, loading }) {
+function GeoChart({ data, title, loading, isFiltered, levelLabel }) {
   return (
     <GscipCard>
       <div className="flex items-center justify-between mb-4">
@@ -361,18 +418,24 @@ function GeoChart({ data, title, loading }) {
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={320}>
-          <BarChart data={data} layout="vertical" margin={{ left: 10, right: 60, top: 5, bottom: 5 }}>
-            <XAxis type="number" tick={{ fontSize: 11, fill: "var(--color-text-muted)" }} axisLine={{ stroke: "var(--color-border)" }} tickLine={false} />
-            <YAxis
-              type="category"
+          <BarChart data={data} margin={{ left: 0, right: 0, top: 10, bottom: 40 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
+            <XAxis
               dataKey="name"
-              width={44}
-              tick={{ fontSize: 11, fill: "var(--color-text-secondary)" }}
+              interval={0}
+              tick={{ fontSize: 10, fill: "var(--color-text-secondary)", fontWeight: 700 }}
+              axisLine={{ stroke: "var(--color-border)" }}
+              tickLine={false}
+              height={50}
+            />
+            <YAxis
+              tick={{ fontSize: 10, fill: "var(--color-text-muted)" }}
               axisLine={false}
               tickLine={false}
+              tickFormatter={(v) => v.toLocaleString()}
             />
             <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(0,0,0,0.04)" }} formatter={(v, n) => [v.toLocaleString(), "Incidents"]} />
-            <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={18} label={{ position: "right", fontSize: 11, fill: "var(--color-text-primary)", formatter: (v) => v.toLocaleString() }}>
+            <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={32}>
               {data.map((_, i) => (
                 <Cell key={i} fill={BAR_COLOR} />
               ))}
@@ -380,7 +443,9 @@ function GeoChart({ data, title, loading }) {
           </BarChart>
         </ResponsiveContainer>
       )}
-      <p className="text-center text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>Reported Incidents</p>
+      <p className="text-center text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>
+        {isFiltered ? "" : "Top 10 "}incidents by {(levelLabel || "area").toLowerCase()}
+      </p>
     </GscipCard>
   );
 }
@@ -565,9 +630,14 @@ function toGeoJSONFeature(boundary) {
 
 // ── MapPanel ────────────────────────────────────────────────────────────
 
-function MapPanel({
-  activeTab, countsMap, kpiData, bins, selectedIds, showPolice, policeStations, showHeatmap,
-  scrubValue, setScrubValue, isPlaying, setIsPlaying, scrubbedDateTo
+ function MapPanel({
+  activeTab, countsMap, kpiData, bins, selectedIds, 
+  showPolice, policeStations, 
+  showHospitals, hospitalLocations,
+  showSchools, schoolLocations,
+  showFireStations, fireStationLocations,
+  showHeatmap,
+  scrubValue, setScrubValue, isPlaying, setIsPlaying, scrubbedDateTo, baselineGeoSummary, level
 }) {
   const [boundaries, setBoundaries] = useState([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -739,10 +809,16 @@ function MapPanel({
 
             const feature = toGeoJSONFeature(b.boundary);
             if (!feature) return null;
-            const fillColor = getBinColor(count, legendBins);
+
+            // Use the TOTAL window count for coloring to match the static legend bins
+            const totalCount = baselineGeoSummary?.items?.find(item =>
+              normaliseId(item.id, level) === b.id
+            )?.crime_count || 0;
+
+            const fillColor = getBinColor(totalCount, legendBins);
             return (
               <GeoJSON
-                key={`${b.uid}-${count}`}
+                key={`${b.uid}-${totalCount}`}
                 data={feature}
                 style={{
                   fillColor,
@@ -755,18 +831,23 @@ function MapPanel({
                     activeTab === "Police Beats" ? "Police Beat" :
                       activeTab === "Wards" ? "Ward" : "Area";
 
-                  // Dark popup that shows on click
+                  // Popup: Only showing Total for selected window
                   layer.bindPopup(
-                    `<div style="color: white; min-width: 140px; margin: -4px;">
-                      <p style="font-weight: 700; font-size: 14px; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 4px;">${typeLabel}: ${b.id}</p>
-                      <p style="font-size: 12px; margin: 0; opacity: 0.9;">Count of Incidents: <span style="font-weight: 600;">${count.toLocaleString()}</span></p>
+                    `<div style="color: white; min-width: 200px; padding: 12px; background: #1a1a1a; border-radius: 8px;">
+                      <h4 style="font-weight: 800; font-size: 14px; margin: 0 0 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; color: #f46d43; text-transform: uppercase; letter-spacing: 0.05em;">${typeLabel} ${b.id}</h4>
+                      <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; justify-between: space-between; align-items: center;">
+                          <span style="font-size: 10px; color: #9ca3af; text-transform: uppercase; font-weight: 600;">Total incidents</span>
+                          <span style="font-size: 14px; font-weight: 700; margin-left: auto;">${totalCount.toLocaleString()}</span>
+                        </div>
+                      </div>
                     </div>`,
-                    { offset: [0, -10] }
+                    { className: "gscip-map-popup", maxWidth: 300 }
                   );
 
                   layer.on({
                     mouseover: (e) => {
-                      e.target.setStyle({ weight: 3, color: "#000", fillOpacity: 1 });
+                      e.target.setStyle({ weight: 3, color: "#fff", fillOpacity: 0.95 });
                       e.target.bringToFront();
                     },
                     mouseout: (e) => {
@@ -794,7 +875,7 @@ function MapPanel({
                 center={centroid}
                 radius={10 + intensity * 40}
                 pathOptions={{
-                  fillColor: intensity > 0.8 ? "#ef4444" : intensity > 0.5 ? "#f97316" : "#eab308",
+                  fillColor: intensity > 0.8 ? "#ef4444" : intensity > 0.4 ? "#f97316" : intensity > 0.1 ? "#eab308" : "#fffbd5",
                   fillOpacity: 0.2 + intensity * 0.4,
                   color: "transparent",
                   weight: 0
@@ -829,6 +910,101 @@ function MapPanel({
               </Marker>
             );
           })}
+
+          {showHospitals && hospitalLocations?.map((h, idx) => {
+            if (!h.latitude || !h.longitude) return null;
+            return (
+              <Marker
+                key={`hospital-${idx}`}
+                position={[h.latitude, h.longitude]}
+                icon={L.divIcon({
+                  html: `
+                    <svg width="24" height="28" viewBox="0 0 40 46" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M20 0 C9 0 0 9 0 20 C0 30 20 46 20 46 C20 46 40 30 40 20 C40 9 31 0 20 0 Z" fill="#E15554"/>
+                      <circle cx="20" cy="19" r="13" fill="white" opacity="0.95"/>
+                      <rect x="18" y="11" width="4" height="16" fill="#E15554"/>
+                      <rect x="12" y="17" width="16" height="4" fill="#E15554"/>
+                    </svg>`,
+                  className: "hospital-marker",
+                  iconSize: [24, 28],
+                  iconAnchor: [12, 28],
+                })}
+              >
+                <Popup>
+                  <div className="p-1 text-slate-800">
+                    <h4 className="font-bold text-[10px] border-b mb-2 pb-1 uppercase tracking-widest">Medical Facility</h4>
+                    <p className="text-[9px] uppercase font-black"><b>Name:</b> {h.hospital_name || h.name}</p>
+                    <p className="text-[9px] uppercase font-bold text-slate-500"><b>Address:</b> {h.address || "N/A"}</p>
+                    <span className="mt-2 inline-block px-2 py-0.5 bg-green-100 text-green-700 text-[7px] font-black uppercase rounded-full">Hospital Layer</span>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
+
+          {showSchools && schoolLocations?.map((s, idx) => {
+            if (!s.latitude || !s.longitude) return null;
+            return (
+              <Marker
+                key={`school-${idx}`}
+                position={[s.latitude, s.longitude]}
+                icon={L.divIcon({
+                  html: `
+                    <svg width="24" height="28" viewBox="0 0 40 46" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M20 0 C9 0 0 9 0 20 C0 30 20 46 20 46 C20 46 40 30 40 20 C40 9 31 0 20 0 Z" fill="#4A90D9"/>
+                      <circle cx="20" cy="19" r="13" fill="white" opacity="0.95"/>
+                      <polygon points="20,10 28,15 20,20 12,15" fill="#4A90D9"/>
+                      <rect x="17" y="20" width="6" height="5" rx="1" fill="#4A90D9"/>
+                      <line x1="27" y1="15" x2="27" y2="21" stroke="#4A90D9" stroke-width="1.5"/>
+                      <circle cx="27" cy="22" r="1.5" fill="#4A90D9"/>
+                    </svg>`,
+                  className: "school-marker",
+                  iconSize: [24, 28],
+                  iconAnchor: [12, 28],
+                })}
+              >
+                <Popup>
+                  <div className="p-1 text-slate-800">
+                    <h4 className="font-bold text-[10px] border-b mb-2 pb-1 uppercase tracking-widest">Education Center</h4>
+                    <p className="text-[9px] uppercase font-black"><b>Name:</b> {s.school_name || s.name}</p>
+                    <p className="text-[9px] uppercase font-bold text-slate-500"><b>Type:</b> {s.school_type || "Public/Charter"}</p>
+                    <p className="text-[9px] uppercase font-bold text-slate-500"><b>Address:</b> {s.address || "N/A"}</p>
+                    <span className="mt-2 inline-block px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[7px] font-black uppercase rounded-full">School Layer</span>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
+
+          {showFireStations && fireStationLocations?.map((f, idx) => {
+            if (!f.latitude || !f.longitude) return null;
+            return (
+              <Marker
+                key={`fire-${idx}`}
+                position={[f.latitude, f.longitude]}
+                icon={L.divIcon({
+                  html: `
+                    <svg width="24" height="28" viewBox="0 0 40 46" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M20 0 C9 0 0 9 0 20 C0 30 20 46 20 46 C20 46 40 30 40 20 C40 9 31 0 20 0 Z" fill="#F2994A"/>
+                      <circle cx="20" cy="19" r="13" fill="white" opacity="0.95"/>
+                      <path d="M20 12 C17 18 24 20 20 28 C28 22 24 18 20 12 Z" fill="#F2994A"/>
+                    </svg>`,
+                  className: "fire-marker",
+                  iconSize: [24, 28],
+                  iconAnchor: [12, 28],
+                })}
+              >
+                <Popup>
+                  <div className="p-1 text-slate-800">
+                    <h4 className="font-bold text-[10px] border-b mb-2 pb-1 uppercase tracking-widest">CFD Station</h4>
+                    <p className="text-[9px] uppercase font-black"><b>Station:</b> {f.station_name || f.name}</p>
+                    <p className="text-[9px] uppercase font-bold text-slate-500"><b>Address:</b> {f.address || "N/A"}</p>
+                    <span className="mt-2 inline-block px-2 py-0.5 bg-red-100 text-red-700 text-[7px] font-black uppercase rounded-full">Fire Dept Layer</span>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
         </MapContainer>
 
         {/* Task 2: Heatmap Legend Overlay */}
@@ -844,16 +1020,12 @@ function MapPanel({
                 <span className="text-[9px] font-black text-slate-600 uppercase">Extreme (&gt;80%)</span>
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-3.5 h-3.5 rounded-full bg-[#f97316] shadow-md border border-white" />
+                <div className="w-3.5 h-3.5 rounded-full bg-[#f46d43] shadow-md border border-white" />
                 <span className="text-[9px] font-black text-slate-600 uppercase">High (50-80%)</span>
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-3.5 h-3.5 rounded-full bg-[#eab308] shadow-md border border-white" />
+                <div className="w-3.5 h-3.5 rounded-full bg-[#fdae61] shadow-md border border-white" />
                 <span className="text-[9px] font-black text-slate-600 uppercase">Moderate (20-50%)</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-3.5 h-3.5 rounded-full bg-[#3b82f6] shadow-md border border-white" />
-                <span className="text-[9px] font-black text-slate-600 uppercase">Baseline (&lt;20%)</span>
               </div>
             </div>
             <div className="mt-3 pt-2.5 border-t border-slate-100">
@@ -898,19 +1070,32 @@ function MapPanel({
 
         {/* Legend Overlay */}
         {legendBins.length > 1 && (
-          <div className="absolute bottom-6 left-6 z-[500] bg-[#e6e8ea] px-3 py-3 rounded-lg shadow-md border border-gray-200">
-            <div className="text-[11px] font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Incidents</div>
-            <div className="space-y-1.5 min-w-[150px]">
+          <div className="absolute bottom-6 left-6 z-[500] bg-white/90 backdrop-blur-md px-4 py-4 rounded-xl shadow-2xl border border-slate-200 min-w-[180px]">
+            <div className="flex items-center gap-2 mb-3 border-b border-slate-100 pb-2">
+              <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+              <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-[0.2em]">Forensic Density</h3>
+            </div>
+            <div className="space-y-2">
               {[...legendBins].reverse().map((bin, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="w-5 h-5 border border-gray-400" style={{ backgroundColor: bin.color }} />
-                  <span className="text-[12px] text-gray-600 font-medium">
-                    {bin.max === Infinity
-                      ? `≥ ${Math.round(bin.min).toLocaleString()}`
-                      : `${Math.round(bin.min).toLocaleString()} – ${Math.round(bin.max).toLocaleString()}`}
-                  </span>
+                <div key={i} className="flex items-center gap-3 group">
+                  <div className="w-4 h-4 rounded shadow-sm border border-slate-300 transition-transform group-hover:scale-110" style={{ backgroundColor: bin.color }} />
+                  <div className="flex flex-col">
+                    <span className="text-[11px] text-slate-700 font-bold leading-tight">
+                      {bin.max === Infinity
+                        ? `≥ ${Math.round(bin.min).toLocaleString()}`
+                        : `${Math.round(bin.min).toLocaleString()} – ${Math.round(bin.max).toLocaleString()}`}
+                    </span>
+                    <span className="text-[8px] text-slate-400 font-black uppercase tracking-tighter">
+                      {i === 0 ? "Critical Concentration" : i === 4 ? "Minimal Activity" : ""}
+                    </span>
+                  </div>
                 </div>
               ))}
+            </div>
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <div className="text-[8px] text-slate-400 font-medium italic">
+                Values represent total crimes in the selected forensic window.
+              </div>
             </div>
           </div>
         )}
@@ -936,6 +1121,12 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
   const [dbMaxDate, setDbMaxDate] = useState(new Date());
   const [showPolice, setShowPolice] = useState(false);
   const [policeStations, setPoliceStations] = useState([]);
+  const [showHospitals, setShowHospitals] = useState(false);
+  const [hospitalLocations, setHospitalLocations] = useState([]);
+  const [showSchools, setShowSchools] = useState(false);
+  const [schoolLocations, setSchoolLocations] = useState([]);
+  const [showFireStations, setShowFireStations] = useState(false);
+  const [fireStationLocations, setFireStationLocations] = useState([]);
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [scrubValue, setScrubValue] = useState(100);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -986,9 +1177,21 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
   useEffect(() => {
     async function sync() {
       try {
+        console.log("SummarySection: Syncing with forensic calendar...");
         const meta = await fetchFilterOptions();
         if (meta?.date_range?.max_date) {
-          setDbMaxDate(new Date(meta.date_range.max_date));
+          const syncedDate = new Date(meta.date_range.max_date);
+          console.log("SummarySection: Calendar anchored to:", syncedDate.toISOString().split("T")[0]);
+          setDbMaxDate(syncedDate);
+
+          // Force applied filters to sync with the new max date baseline
+          setAppliedFilters(prev => ({
+            ...prev,
+            customRange: {
+              dateFrom: new Date(syncedDate.getTime() - 30 * 86400000).toISOString().split("T")[0],
+              dateTo: syncedDate.toISOString().split("T")[0]
+            }
+          }));
         }
       } catch (e) {
         console.warn("SummarySection: Calendar sync failed, using system clock:", e);
@@ -1004,6 +1207,30 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
       }).catch(e => console.error("SummarySection: Failed to load police stations", e));
     }
   }, [showPolice]);
+
+  useEffect(() => {
+    if (showHospitals && hospitalLocations.length === 0) {
+      fetchHospitals().then(data => {
+        setHospitalLocations(data);
+      }).catch(e => console.error("SummarySection: Failed to load hospitals", e));
+    }
+  }, [showHospitals]);
+
+  useEffect(() => {
+    if (showSchools && schoolLocations.length === 0) {
+      fetchSchools().then(data => {
+        setSchoolLocations(data);
+      }).catch(e => console.error("SummarySection: Failed to load schools", e));
+    }
+  }, [showSchools]);
+
+  useEffect(() => {
+    if (showFireStations && fireStationLocations.length === 0) {
+      fetchFireStations().then(data => {
+        setFireStationLocations(data);
+      }).catch(e => console.error("SummarySection: Failed to load fire stations", e));
+    }
+  }, [showFireStations]);
 
   // Sync helpers
   const isDistrictsTab = activeTab === "Police Districts";
@@ -1087,18 +1314,20 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
     setLoadingKpi(true);
 
     try {
-      const { dateFrom } = timeFrameToDates(appliedFilters.timeFrame, dbMaxDate, appliedFilters.customRange);
-      const dt = dbMaxDate.toISOString().split("T")[0]; // Fetch full range for client-side replay
+      const { dateFrom, dateTo: calcDateTo } = timeFrameToDates(appliedFilters.timeFrame, dbMaxDate, appliedFilters.customRange);
+      const dt = calcDateTo; // Use the derived dateTo from helper for consistency
 
       const q = {
         dateFrom,
         dateTo: dt,
-        limit: 50000,
+        limit: 5000,
         districtIds: (geoFilterParams.districtIds?.length) ? geoFilterParams.districtIds : undefined,
         wardIds: (geoFilterParams.wardIds?.length) ? geoFilterParams.wardIds : undefined,
         beatIds: (geoFilterParams.beatIds?.length) ? geoFilterParams.beatIds : undefined,
         crimeTypeIds: (crimeTypeIds?.length) ? crimeTypeIds : undefined
       };
+
+      console.log("SummarySection: Fetching dashboard payload for range:", q.dateFrom, "to", q.dateTo);
 
       const [gs, ct, trends, kpi, baseline, rawIncidents] = await Promise.all([
         fetchGeospatialSummary({ ...q, level }),
@@ -1108,6 +1337,12 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
         fetchGeospatialSummary({ dateFrom, dateTo: dt, crimeTypeIds: q.crimeTypeIds, level }),
         fetchMapIncidents(q)
       ]);
+
+      console.log("SummarySection: Payload received.", {
+        geoItems: gs?.items?.length || 0,
+        crimeTypes: ct?.length || 0,
+        incidents: rawIncidents?.length || 0
+      });
 
       setGeoSummary(gs || { total_incidents: 0, items: [] });
       setCrimeTypes(ct || []);
@@ -1204,8 +1439,10 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
     if (appliedFilters.selectedCrimes.length > 0) {
       list = list.filter((ct) => appliedFilters.selectedCrimes.includes(ct.name));
     }
-    // Limit to top 10 to avoid excessive scroll in high-density view
-    return list.slice(0, 10);
+    // Sort by count descending and limit to top 10 for forensic focus
+    return [...list]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
   }, [crimeTypes, appliedFilters.selectedCrimes]);
 
   // Map support — build countsMap using the SAME normaliseId so boundary and summary IDs always match
@@ -1213,7 +1450,7 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
   const countsMap = useMemo(() => {
     const m = new Map();
     visibleIncidents.forEach((inc) => {
-      const rawId = level === "ward" ? inc.ward : level === "district" ? inc.district : inc.beat_num;
+      const rawId = level === "ward" ? inc.ward : level === "district" ? inc.district_id : inc.beat_num;
       if (rawId == null) return;
       const normId = normaliseId(rawId, level);
       m.set(normId, (m.get(normId) || 0) + 1);
@@ -1332,17 +1569,33 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
                 setSelectedCrimes([]);
                 setAppliedFilters(prev => ({ ...prev, selectedCrimes: [] }));
               }}
-              showPolice={showPolice}
+               showPolice={showPolice}
               onTogglePolice={() => setShowPolice(!showPolice)}
+              showHospitals={showHospitals}
+              onToggleHospitals={() => setShowHospitals(!showHospitals)}
+              showSchools={showSchools}
+              onToggleSchools={() => setShowSchools(!showSchools)}
+              showFireStations={showFireStations}
+              onToggleFireStations={() => setShowFireStations(!showFireStations)}
               showHeatmap={showHeatmap}
               onToggleHeatmap={() => setShowHeatmap(!showHeatmap)}
             />
           </div>
           <div className="col-span-4">
-            <CrimeTypeChart data={filteredCrimeChartData || []} loading={loadingCrimes} />
+            <CrimeTypeChart
+              data={filteredCrimeChartData || []}
+              loading={loadingCrimes}
+              isFiltered={appliedFilters.selectedCrimes.length > 0}
+            />
           </div>
           <div className="col-span-5">
-            <GeoChart data={filteredGeoChartData || []} title={tabConfig?.chartTitle || "Incidents"} loading={loadingGeo} />
+            <GeoChart
+              data={filteredGeoChartData || []}
+              title={tabConfig?.chartTitle || "Incidents"}
+              loading={loadingGeo}
+              isFiltered={currentSelectedIds.length > 0}
+              levelLabel={activeTab === "Police Districts" ? "Districts" : activeTab === "Police Beats" ? "Beats" : activeTab === "Wards" ? "Wards" : "Area"}
+            />
           </div>
         </div>
 
@@ -1413,14 +1666,22 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
               kpiData={{ ...(kpiData || {}), total_incidents: calculatedTotalCount }}
               bins={choroplethBins || []}
               selectedIds={currentSelectedIds || []}
-              showPolice={showPolice}
+               showPolice={showPolice}
               policeStations={policeStations}
+              showHospitals={showHospitals}
+              hospitalLocations={hospitalLocations}
+              showSchools={showSchools}
+              schoolLocations={schoolLocations}
+              showFireStations={showFireStations}
+              fireStationLocations={fireStationLocations}
               showHeatmap={showHeatmap}
               scrubValue={scrubValue}
               setScrubValue={setScrubValue}
               isPlaying={isPlaying}
               setIsPlaying={setIsPlaying}
               scrubbedDateTo={scrubbedDateTo}
+              baselineGeoSummary={baselineGeoSummary}
+              level={level}
             />
           </div>
         </div>

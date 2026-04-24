@@ -229,29 +229,39 @@ export function FilterProvider({ children }) {
         const crimeTypeMap = {};
 
         const districts =
-          data?.districts
-            ?.map((d) => {
-              const name = d?.district_name;
-              const id = d?.district_id ?? d?.id;
-              if (name && id != null) districtMap[name] = normalizeDistrictId(id);
-              return name;
-            })
-            .filter(Boolean) || DEFAULT_DISTRICT_OPTIONS;
+          data?.districts && data.districts.length > 0
+            ? data.districts
+                .map((d) => {
+                  const name = d?.district_name;
+                  const id = d?.district_id ?? d?.id;
+                  if (name && id != null) districtMap[name] = normalizeDistrictId(id);
+                  return name;
+                })
+                .filter(Boolean)
+            : DEFAULT_DISTRICT_OPTIONS;
 
         const crimeTypes =
-          data?.crime_types
-            ?.map((c) => {
-              const name = c?.primary_type;
-              const id = c?.crime_type_id ?? c?.id;
-              if (name && id != null) crimeTypeMap[name] = String(id);
-              return name;
-            })
-            .filter(Boolean) || DEFAULT_CRIME_TYPE_OPTIONS;
+          data?.crime_types && data.crime_types.length > 0
+            ? data.crime_types
+                .map((c) => {
+                  const name = c?.primary_type;
+                  const id = c?.crime_type_id ?? c?.id;
+                  if (name && id != null) crimeTypeMap[name] = String(id);
+                  return name;
+                })
+                .filter(Boolean)
+            : DEFAULT_CRIME_TYPE_OPTIONS;
 
         // ✅ Set state
         setDistrictOptions(districts);
         setCrimeTypeOptions(crimeTypes);
-        setRiskTierOptions(data?.riskTiers || DEFAULT_RISK_TIER_OPTIONS);
+        setRiskTierOptions(
+          data?.risk_tiers && data.risk_tiers.length > 0
+            ? data.risk_tiers
+            : data?.riskTiers && data.riskTiers.length > 0
+            ? data.riskTiers
+            : DEFAULT_RISK_TIER_OPTIONS
+        );
         setDistrictIdByName(districtMap);
         setCrimeTypeIdByName(crimeTypeMap);
       } catch (err) {

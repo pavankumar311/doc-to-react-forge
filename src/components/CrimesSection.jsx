@@ -22,6 +22,9 @@ import {
   fetchHourlyTrends,
   fetchPlatformTrend,
   fetchPoliceStations,
+  fetchHospitals,
+  fetchSchools,
+  fetchFireStations,
   AUTH_TOKEN
 } from "../services/api";
 import { DownloadCloud, ShieldCheck } from "lucide-react";
@@ -300,6 +303,12 @@ export default function CrimesSection() {
   const [loading, setLoading] = useState(false);
   const [showPolice, setShowPolice] = useState(false);
   const [policeStations, setPoliceStations] = useState([]);
+  const [showHospitals, setShowHospitals] = useState(false);
+  const [hospitalLocations, setHospitalLocations] = useState([]);
+  const [showSchools, setShowSchools] = useState(false);
+  const [schoolLocations, setSchoolLocations] = useState([]);
+  const [showFireStations, setShowFireStations] = useState(false);
+  const [fireStationLocations, setFireStationLocations] = useState([]);
   const [scrubValue, setScrubValue] = useState(100);
   const [isPlaying, setIsPlaying] = useState(false);
   const [dbMaxDate, setDbMaxDate] = useState(new Date());
@@ -369,6 +378,30 @@ export default function CrimesSection() {
       }).catch(e => console.error("Failed to load police stations", e));
     }
   }, [showPolice]);
+
+  useEffect(() => {
+    if (showHospitals && hospitalLocations.length === 0) {
+      fetchHospitals().then(data => {
+        setHospitalLocations(data);
+      }).catch(e => console.error("CrimesSection: Failed to load hospitals", e));
+    }
+  }, [showHospitals]);
+
+  useEffect(() => {
+    if (showSchools && schoolLocations.length === 0) {
+      fetchSchools().then(data => {
+        setSchoolLocations(data);
+      }).catch(e => console.error("CrimesSection: Failed to load schools", e));
+    }
+  }, [showSchools]);
+
+  useEffect(() => {
+    if (showFireStations && fireStationLocations.length === 0) {
+      fetchFireStations().then(data => {
+        setFireStationLocations(data);
+      }).catch(e => console.error("CrimesSection: Failed to load fire stations", e));
+    }
+  }, [showFireStations]);
 
   // Sync with backend calendar to avoid "empty future" data discrepancy
   useEffect(() => {
@@ -509,8 +542,13 @@ export default function CrimesSection() {
 
       setKpis({ total: summary.total_incidents || 0, violent: v, property: p, other: o });
       setCrimeTypeData(types);
-      setBeatRanking((beatSummary.items || []).slice(0, 10));
-      setWardRanking((wardSummary.items || []).slice(0, 10));
+      
+      // Sort and slice rankings to ensure forensic focus
+      const sortedBeats = (beatSummary.items || []).sort((a, b) => (b.crime_count || 0) - (a.crime_count || 0));
+      const sortedWards = (wardSummary.items || []).sort((a, b) => (b.crime_count || 0) - (a.crime_count || 0));
+      
+      setBeatRanking(sortedBeats.slice(0, 10));
+      setWardRanking(sortedWards.slice(0, 10));
       setTrendSeries(platformTrend);
 
       // Build Hourly (Time of Day) data from real API
@@ -710,6 +748,45 @@ export default function CrimesSection() {
                   </div>
                 </div>
 
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px]">🏥</span>
+                    <span className={`text-[10px] font-black uppercase ${showHospitals ? 'text-slate-800' : 'text-slate-400'}`}>Hospitals</span>
+                  </div>
+                  <div
+                    onClick={() => setShowHospitals(!showHospitals)}
+                    className={`w-10 h-5 rounded-full relative transition-all cursor-pointer ${showHospitals ? 'bg-emerald-600 shadow-inner' : 'bg-slate-200'}`}
+                  >
+                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all shadow-sm ${showHospitals ? 'left-6' : 'left-1'}`} />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px]">🏫</span>
+                    <span className={`text-[10px] font-black uppercase ${showSchools ? 'text-slate-800' : 'text-slate-400'}`}>Schools</span>
+                  </div>
+                  <div
+                    onClick={() => setShowSchools(!showSchools)}
+                    className={`w-10 h-5 rounded-full relative transition-all cursor-pointer ${showSchools ? 'bg-indigo-600 shadow-inner' : 'bg-slate-200'}`}
+                  >
+                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all shadow-sm ${showSchools ? 'left-6' : 'left-1'}`} />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px]">🚒</span>
+                    <span className={`text-[10px] font-black uppercase ${showFireStations ? 'text-slate-800' : 'text-slate-400'}`}>Fire Stations</span>
+                  </div>
+                  <div
+                    onClick={() => setShowFireStations(!showFireStations)}
+                    className={`w-10 h-5 rounded-full relative transition-all cursor-pointer ${showFireStations ? 'bg-red-600 shadow-inner' : 'bg-slate-200'}`}
+                  >
+                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all shadow-sm ${showFireStations ? 'left-6' : 'left-1'}`} />
+                  </div>
+                </div>
+
               </div>
 
               <div className="h-px bg-slate-50" />
@@ -878,27 +955,118 @@ export default function CrimesSection() {
                   </Marker>
                 ))}
 
-                {showPolice && policeStations?.map((ps, idx) => {
-                  if (!ps.latitude || !ps.longitude) return null;
-                  const distNum = ps.district || ps.district_id || ps.dist || ps.id || "N/A";
+                {showPolice && policeStations?.map((p, idx) => {
+                  const lat = parseFloat(p.latitude);
+                  const lng = parseFloat(p.longitude);
+                  if (isNaN(lat) || isNaN(lng)) return null;
                   return (
                     <Marker
                       key={`police-${idx}`}
-                      position={[ps.latitude, ps.longitude]}
+                      position={[lat, lng]}
                       icon={L.divIcon({
-                        html: `<div style="font-size: 24px; cursor: pointer;" title="Police Station">👮</div>`,
+                        html: `<div style="font-size: 18px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));" title="Police Station">👮</div>`,
                         className: "police-emoji-marker",
-                        iconSize: [30, 30],
-                        iconAnchor: [15, 15],
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
                       })}
                     >
                       <Popup>
                         <div className="p-1">
-                          <h4 className="font-bold text-[10px] border-b mb-2 pb-1 text-slate-800 uppercase tracking-widest">CPD Precinct Details</h4>
-                          <p className="text-[9px] uppercase font-black"><b>District:</b> {distNum}</p>
-                          <p className="text-[9px] uppercase font-bold text-slate-500"><b>Address:</b> {ps.address || ps.address_text || "N/A"}</p>
-                          <p className="text-[9px] uppercase font-bold text-slate-500"><b>Name:</b> {ps.station_name || ps.name || (distNum !== "N/A" ? `District ${distNum}` : "Unknown Station")}</p>
-                          {ps.phone && <p className="text-[9px] uppercase font-bold text-slate-500"><b>Phone:</b> {ps.phone}</p>}
+                          <h4 className="font-black text-[10px] border-b pb-1 mb-2 uppercase tracking-widest text-blue-800">Station {p.district_id}</h4>
+                          <p className="text-[9px] font-black uppercase"><b>District:</b> {p.district_name || p.district}</p>
+                          <p className="text-[9px] font-bold text-slate-500 uppercase"><b>Address:</b> {p.address}</p>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
+
+                {showHospitals && hospitalLocations?.map((h, idx) => {
+                  if (!h.latitude || !h.longitude) return null;
+                  return (
+                    <Marker
+                      key={`hospital-${idx}`}
+                      position={[h.latitude, h.longitude]}
+                      icon={L.divIcon({
+                        html: `
+                          <svg width="24" height="28" viewBox="0 0 40 46" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 0 C9 0 0 9 0 20 C0 30 20 46 20 46 C20 46 40 30 40 20 C40 9 31 0 20 0 Z" fill="#E15554"/>
+                            <circle cx="20" cy="19" r="13" fill="white" opacity="0.95"/>
+                            <rect x="18" y="11" width="4" height="16" fill="#E15554"/>
+                            <rect x="12" y="17" width="16" height="4" fill="#E15554"/>
+                          </svg>`,
+                        className: "hospital-marker",
+                        iconSize: [24, 28],
+                        iconAnchor: [12, 28]
+                      })}
+                    >
+                      <Popup>
+                        <div className="p-1">
+                          <h4 className="font-black text-[10px] border-b pb-1 mb-2 uppercase tracking-widest text-red-600">Medical Facility</h4>
+                          <p className="text-[9px] font-black uppercase"><b>Name:</b> {h.hospital_name || h.name}</p>
+                          <p className="text-[9px] font-bold text-slate-500 uppercase"><b>Address:</b> {h.address}</p>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
+
+                {showSchools && schoolLocations?.map((s, idx) => {
+                  if (!s.latitude || !s.longitude) return null;
+                  return (
+                    <Marker
+                      key={`school-${idx}`}
+                      position={[s.latitude, s.longitude]}
+                      icon={L.divIcon({
+                        html: `
+                          <svg width="24" height="28" viewBox="0 0 40 46" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 0 C9 0 0 9 0 20 C0 30 20 46 20 46 C20 46 40 30 40 20 C40 9 31 0 20 0 Z" fill="#4A90D9"/>
+                            <circle cx="20" cy="19" r="13" fill="white" opacity="0.95"/>
+                            <polygon points="20,10 28,15 20,20 12,15" fill="#4A90D9"/>
+                            <rect x="17" y="20" width="6" height="5" rx="1" fill="#4A90D9"/>
+                            <line x1="27" y1="15" x2="27" y2="21" stroke="#4A90D9" stroke-width="1.5"/>
+                            <circle cx="27" cy="22" r="1.5" fill="#4A90D9"/>
+                          </svg>`,
+                        className: "school-marker",
+                        iconSize: [24, 28],
+                        iconAnchor: [12, 28]
+                      })}
+                    >
+                      <Popup>
+                        <div className="p-1">
+                          <h4 className="font-black text-[10px] border-b pb-1 mb-2 uppercase tracking-widest text-blue-600">Education Center</h4>
+                          <p className="text-[9px] font-black uppercase"><b>Name:</b> {s.school_name || s.name}</p>
+                          <p className="text-[9px] font-bold text-slate-500 uppercase"><b>Type:</b> {s.school_type || "Public/Charter"}</p>
+                          <p className="text-[9px] font-bold text-slate-500 uppercase"><b>Address:</b> {s.address}</p>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
+
+                {showFireStations && fireStationLocations?.map((f, idx) => {
+                  if (!f.latitude || !f.longitude) return null;
+                  return (
+                    <Marker
+                      key={`fire-${idx}`}
+                      position={[f.latitude, f.longitude]}
+                      icon={L.divIcon({
+                        html: `
+                          <svg width="24" height="28" viewBox="0 0 40 46" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 0 C9 0 0 9 0 20 C0 30 20 46 20 46 C20 46 40 30 40 20 C40 9 31 0 20 0 Z" fill="#F2994A"/>
+                            <circle cx="20" cy="19" r="13" fill="white" opacity="0.95"/>
+                            <path d="M20 12 C17 18 24 20 20 28 C28 22 24 18 20 12 Z" fill="#F2994A"/>
+                          </svg>`,
+                        className: "fire-marker",
+                        iconSize: [24, 28],
+                        iconAnchor: [12, 28]
+                      })}
+                    >
+                      <Popup>
+                        <div className="p-1">
+                          <h4 className="font-black text-[10px] border-b pb-1 mb-2 uppercase tracking-widest text-orange-600">CFD Station</h4>
+                          <p className="text-[9px] font-black uppercase"><b>Station:</b> {f.station_name || f.name}</p>
+                          <p className="text-[9px] font-bold text-slate-500 uppercase"><b>Address:</b> {f.address}</p>
                         </div>
                       </Popup>
                     </Marker>
@@ -1385,18 +1553,32 @@ function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanki
         {/* Row 1 */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[280px]">
           <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-2">
-            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Top 10 Crimes ({districtName})</h4>
+            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">
+              {filters.crimeType !== "All" ? "" : "Top 10 "}Crimes ({districtName})
+            </h4>
             <button onClick={() => downloadCSV(barData, `top_crimes_${districtName}.csv`)} className="p-1 hover:bg-slate-100 rounded text-slate-400 transition-colors" title="Export CSV">
               <DownloadCloud size={14} />
             </button>
           </div>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData} layout="vertical">
-                <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" width={80} fontSize={8} fontWeight="bold" axisLine={false} tickLine={false} />
+              <BarChart data={barData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis 
+                  dataKey="name" 
+                  fontSize={8} 
+                  fontWeight="bold" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  angle={-30} 
+                  textAnchor="end" 
+                  interval={0}
+                  height={50}
+                  tickFormatter={(v) => v.length > 10 ? v.substring(0, 9) + '..' : v}
+                />
+                <YAxis fontSize={8} fontWeight="bold" axisLine={false} tickLine={false} tickFormatter={(v) => v.toLocaleString()} />
                 <Tooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '8px', border: 'none', fontSize: '9px' }} />
-                <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={16}>
                   {barData.map((d, i) => <Cell key={i} fill={getCategoryColor(d.category).color} />)}
                 </Bar>
               </BarChart>
@@ -1426,18 +1608,21 @@ function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanki
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[280px]">
           <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-2">
-            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Crime by Beat (Top 10)</h4>
+            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">
+              {filters.beat !== "All" || filters.district !== "All" ? "" : "Top 10 "}Incidents by Beat
+            </h4>
             <button onClick={() => downloadCSV(beatRanking.slice(0, 10), "crime_by_beat.csv")} className="p-1 hover:bg-slate-100 rounded text-slate-400 transition-colors" title="Export CSV">
               <DownloadCloud size={14} />
             </button>
           </div>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={beatRanking.slice(0, 10)} layout="vertical">
-                <XAxis type="number" hide />
-                <YAxis dataKey="id" type="category" width={40} fontSize={8} fontWeight="bold" axisLine={false} tickLine={false} />
+              <BarChart data={beatRanking.slice(0, 10)} margin={{ top: 10, right: 10, left: 0, bottom: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="id" fontSize={8} fontWeight="bold" axisLine={false} tickLine={false} interval={0} height={30} />
+                <YAxis fontSize={8} fontWeight="bold" axisLine={false} tickLine={false} tickFormatter={(v) => v.toLocaleString()} />
                 <Tooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '8px', border: 'none', fontSize: '9px' }} />
-                <Bar dataKey="crime_count" fill="#0369a1" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="crime_count" fill="#0369a1" radius={[4, 4, 0, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -1466,18 +1651,21 @@ function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanki
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm h-[280px] flex flex-col">
           <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-2">
-            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Crime by Ward (Top 10)</h4>
+            <h4 className="text-[10px] font-black text-slate-800 uppercase tracking-widest">
+              {filters.ward !== "All" ? "" : "Top 10 "}Incidents by Ward
+            </h4>
             <button onClick={() => downloadCSV(wardRanking.slice(0, 10), "crime_by_ward.csv")} className="p-1 hover:bg-slate-100 rounded text-slate-400 transition-colors" title="Export CSV">
               <DownloadCloud size={14} />
             </button>
           </div>
           <div className="flex-1">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={wardRanking.slice(0, 10)} layout="vertical">
-                <XAxis type="number" hide />
-                <YAxis dataKey="id" type="category" width={40} fontSize={8} fontWeight="bold" axisLine={false} tickLine={false} />
+              <BarChart data={wardRanking.slice(0, 10)} margin={{ top: 10, right: 10, left: 0, bottom: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="id" fontSize={8} fontWeight="bold" axisLine={false} tickLine={false} interval={0} height={30} />
+                <YAxis fontSize={8} fontWeight="bold" axisLine={false} tickLine={false} tickFormatter={(v) => v.toLocaleString()} />
                 <Tooltip cursor={{ fill: '#f1f5f9' }} contentStyle={{ borderRadius: '8px', border: 'none', fontSize: '9px' }} />
-                <Bar dataKey="crime_count" fill="#0ea5e9" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="crime_count" fill="#0ea5e9" radius={[4, 4, 0, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
           </div>

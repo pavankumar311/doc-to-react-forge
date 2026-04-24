@@ -14,22 +14,39 @@ export default function TrendsPage() {
   const [granularity, setGranularity] = useState("Daily");
   const [trendData, setTrendData] = useState([]);
   const [trendDistricts, setTrendDistricts] = useState([]);
+  const [hoveredLine, setHoveredLine] = useState(null);
   const [rollingTrend, setRollingTrend] = useState({ avg_7d: 0, avg_30d: 0, trend_slope: 0, series: [] });
   const [crimeTypes, setCrimeTypes] = useState([]);
   const [trendLoading, setTrendLoading] = useState(true);
-  const { filters, districtIdByName } = useFilters();
+  const { filters, districtIdByName, crimeTypeIdByName } = useFilters();
 
   const windowType = granularity === "Daily" ? "day" : granularity === "Weekly" ? "week" : "month";
   const lineColors = ["#1E88E5", "#F57C00", "#2E7D32", "#8E24AA", "#00897B", "#C62828"];
+
+  const handleMouseMove = (e) => {
+    if (e && e.activePayload && e.chartY) {
+      let closestLine = null;
+      let minDistance = Infinity;
+      e.activePayload.forEach((item) => {
+        const dist = Math.abs(item.cy - e.chartY);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestLine = item.dataKey;
+        }
+      });
+      if (minDistance < 100) setHoveredLine(closestLine);
+      else setHoveredLine(null);
+    }
+  };
 
   useEffect(() => {
     const loadTrend = async () => {
       setTrendLoading(true);
       try {
         const [trendCompare, rolling, types] = await Promise.all([
-          fetchTrendCompare({ filters, windowType, districtIdByName }),
-          fetchRollingTrend({ filters, districtIdByName }),
-          fetchCrimeTypes({ filters, districtIdByName }),
+          fetchTrendCompare({ filters, windowType, districtIdByName, crimeTypeIdByName }),
+          fetchRollingTrend({ filters, districtIdByName, crimeTypeIdByName }),
+          fetchCrimeTypes({ filters, districtIdByName, crimeTypeIdByName }),
         ]);
         setTrendData(trendCompare.series);
         setTrendDistricts(trendCompare.districts);
@@ -42,7 +59,7 @@ export default function TrendsPage() {
       }
     };
     loadTrend();
-  }, [granularity, filters, districtIdByName, windowType]);
+  }, [granularity, filters, districtIdByName, crimeTypeIdByName, windowType]);
 
   const chartTooltipStyle = {
     background: "#1A2744", border: "1px solid #2A3F6F",
@@ -73,17 +90,41 @@ export default function TrendsPage() {
       </div>
 
       <GscipCard title="District Crime Trend" className="mb-4">
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={trendData}>
+        <ResponsiveContainer width="100%" height={450}>
+          <LineChart
+            data={trendData}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={() => setHoveredLine(null)}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="#2A3F6F" />
             <XAxis dataKey="label" stroke="#4A5880" fontSize={11} fontFamily="IBM Plex Mono" />
             <YAxis stroke="#4A5880" fontSize={11} fontFamily="IBM Plex Mono" />
-            <Tooltip contentStyle={chartTooltipStyle} />
-            <Legend wrapperStyle={{ fontSize: 11, fontFamily: "IBM Plex Sans" }} />
+            <Tooltip
+              contentStyle={chartTooltipStyle}
+              shared={true}
+              formatter={(value, name, entry) => {
+                if (hoveredLine && entry.dataKey !== hoveredLine) return [null, null];
+                return [value, name];
+              }}
+            />
+            <Legend
+              wrapperStyle={{ fontSize: 11, fontFamily: "IBM Plex Sans" }}
+              onMouseEnter={(e) => setHoveredLine(e.dataKey)}
+              onMouseLeave={() => setHoveredLine(null)}
+            />
             {trendDistricts.map((district, index) => (
               <Line
-                key={district.key} type="monotone" dataKey={district.key} name={district.name}
-                stroke={lineColors[index % lineColors.length]} strokeWidth={2} dot={false}
+                key={district.key}
+                type="monotone"
+                dataKey={district.key}
+                name={district.name}
+                stroke={lineColors[index % lineColors.length]}
+                strokeWidth={hoveredLine === district.key ? 3 : 2}
+                strokeOpacity={hoveredLine === null || hoveredLine === district.key ? 1 : 0.25}
+                dot={false}
+                activeDot={{ r: 6, strokeWidth: 0 }}
+                onMouseEnter={() => setHoveredLine(district.key)}
+                onMouseLeave={() => setHoveredLine(null)}
               />
             ))}
           </LineChart>

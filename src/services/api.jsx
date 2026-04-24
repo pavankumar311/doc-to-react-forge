@@ -38,7 +38,7 @@ const DASHBOARD_API_BASE = "/api/v1/dashboard";
 const REPORTS_API_BASE = "/api/v1/reports";
 const CHAT_API_BASE = "/api/v1/chat";
 export const AUTH_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3Njc1MTcwMSwgImV4cCI6IDE3NzY4MzgxMDF9.yTl3ffvcPalYaETf3VQSh7wGGZTjTXLgD-RWdBm0Ezs";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NzAxNDYwNywgImV4cCI6IDE3NzcxMDEwMDd9.YZaX7MxmD8l4na0HfEzvJ1k76V_S2-5dOLps277cfCg";
 
 function normalizeDistrictId(value) {
   if (value == null) return "";
@@ -80,7 +80,7 @@ function buildTopRiskBlocksUrl({ filters, limit, districtIdByName, crimeTypeIdBy
   return `${DASHBOARD_API_BASE}/map/blocks?${params.toString()}`;
 }
 
-function buildTrendCompareUrl({ filters, windowType, districtIdByName }) {
+function buildTrendCompareUrl({ filters, windowType, districtIdByName, crimeTypeIdByName }) {
   const params = new URLSearchParams();
   if (windowType) params.set("window_type", windowType);
   if (filters?.dateFrom) params.set("date_from", filters.dateFrom);
@@ -93,11 +93,23 @@ function buildTrendCompareUrl({ filters, windowType, districtIdByName }) {
     if (ids.length > 0) params.set("district_ids", ids.join(","));
   }
 
+  if (filters?.crimeTypes?.length) {
+    const ids = filters.crimeTypes
+      .map((name) => crimeTypeIdByName?.[name] ?? normalizeCrimeTypeId(name))
+      .filter(Boolean);
+    if (ids.length > 0) params.set("crime_type_ids", ids.join(","));
+  }
+
+  if (filters?.riskTiers?.length) {
+    params.set("risk_tiers", filters.riskTiers.join(","));
+  }
+
   return `${DASHBOARD_API_BASE}/trends/compare?${params.toString()}`;
 }
 
-function buildRollingTrendUrl({ filters, districtIdByName }) {
+function buildRollingTrendUrl({ filters, districtIdByName, crimeTypeIdByName }) {
   const params = new URLSearchParams();
+  if (filters?.dateFrom) params.set("date_from", filters.dateFrom);
   if (filters?.dateTo) params.set("date_to", filters.dateTo);
 
   if (filters?.districts?.length) {
@@ -109,9 +121,13 @@ function buildRollingTrendUrl({ filters, districtIdByName }) {
 
   if (filters?.crimeTypes?.length) {
     const ids = filters.crimeTypes
-      .map((name) => normalizeCrimeTypeId(name))
+      .map((name) => crimeTypeIdByName?.[name] ?? normalizeCrimeTypeId(name))
       .filter(Boolean);
     if (ids.length > 0) params.set("crime_type_ids", ids.join(","));
+  }
+
+  if (filters?.riskTiers?.length) {
+    params.set("risk_tiers", filters.riskTiers.join(","));
   }
 
   if (filters?.arrestOnly) params.set("is_arrest", "true");
@@ -172,7 +188,7 @@ export async function fetchAlerts(filters = {}) {
   return Promise.resolve(alerts);
 }
 
-function buildCrimeTypesUrl({ filters, districtIdByName }) {
+function buildCrimeTypesUrl({ filters, districtIdByName, crimeTypeIdByName }) {
   const params = new URLSearchParams();
   params.set("date_from", filters?.dateFrom);
   params.set("date_to", filters?.dateTo);
@@ -183,12 +199,24 @@ function buildCrimeTypesUrl({ filters, districtIdByName }) {
       .filter(Boolean);
     if (ids.length > 0) params.set("district_ids", ids.join(","));
   }
+
+  if (filters?.crimeTypes?.length) {
+    const ids = filters.crimeTypes
+      .map((name) => crimeTypeIdByName?.[name] ?? normalizeCrimeTypeId(name))
+      .filter(Boolean);
+    if (ids.length > 0) params.set("crime_type_ids", ids.join(","));
+  }
+
+  if (filters?.riskTiers?.length) {
+    params.set("risk_tiers", filters.riskTiers.join(","));
+  }
+
   return `${DASHBOARD_API_BASE}/crime-types?${params.toString()}`;
 }
 
-export async function fetchCrimeTypes({ filters, districtIdByName } = {}) {
+export async function fetchCrimeTypes({ filters, districtIdByName, crimeTypeIdByName } = {}) {
   try {
-    const url = buildCrimeTypesUrl({ filters, districtIdByName });
+    const url = buildCrimeTypesUrl({ filters, districtIdByName, crimeTypeIdByName });
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
     });
@@ -211,9 +239,9 @@ export async function fetchCrimeTypes({ filters, districtIdByName } = {}) {
   }
 }
 
-export async function fetchWeeklyTrend({ filters, districtIdByName } = {}) {
+export async function fetchWeeklyTrend({ filters, districtIdByName, crimeTypeIdByName } = {}) {
   try {
-    const url = buildRollingTrendUrl({ filters, districtIdByName });
+    const url = buildRollingTrendUrl({ filters, districtIdByName, crimeTypeIdByName });
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${AUTH_TOKEN}`,
@@ -235,9 +263,9 @@ export async function fetchWeeklyTrend({ filters, districtIdByName } = {}) {
 }
 
 // ── Trends ─────────────────────────────────────────────────────────────
-export async function fetchTrendCompare({ filters, windowType = "month", districtIdByName } = {}) {
+export async function fetchTrendCompare({ filters, windowType = "month", districtIdByName, crimeTypeIdByName } = {}) {
   try {
-    const url = buildTrendCompareUrl({ filters, windowType, districtIdByName });
+    const url = buildTrendCompareUrl({ filters, windowType, districtIdByName, crimeTypeIdByName });
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${AUTH_TOKEN}`,
@@ -286,9 +314,9 @@ export async function fetchTrendCompare({ filters, windowType = "month", distric
   }
 }
 
-export async function fetchRollingTrend({ filters, districtIdByName } = {}) {
+export async function fetchRollingTrend({ filters, districtIdByName, crimeTypeIdByName } = {}) {
   try {
-    const url = buildRollingTrendUrl({ filters, districtIdByName });
+    const url = buildRollingTrendUrl({ filters, districtIdByName, crimeTypeIdByName });
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${AUTH_TOKEN}`,
@@ -505,6 +533,30 @@ export async function fetchPoliceStations() {
     headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
   });
   if (!res.ok) throw new Error("Police stations fetch failed");
+  return await res.json();
+}
+
+export async function fetchHospitals() {
+  const res = await fetch(`${DASHBOARD_API_BASE}/map/hospitals`, {
+    headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+  });
+  if (!res.ok) throw new Error("Hospitals fetch failed");
+  return await res.json();
+}
+
+export async function fetchSchools() {
+  const res = await fetch(`${DASHBOARD_API_BASE}/map/schools`, {
+    headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+  });
+  if (!res.ok) throw new Error("Schools fetch failed");
+  return await res.json();
+}
+
+export async function fetchFireStations() {
+  const res = await fetch(`${DASHBOARD_API_BASE}/map/fire-stations`, {
+    headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+  });
+  if (!res.ok) throw new Error("Fire stations fetch failed");
   return await res.json();
 }
 
