@@ -97,7 +97,6 @@ export default function FilterBar() {
     clearFilters,
     DISTRICT_OPTIONS,
     CRIME_TYPE_OPTIONS,
-    RISK_TIER_OPTIONS,
   } = useFilters();
 
   return (
@@ -128,13 +127,6 @@ export default function FilterBar() {
         options={CRIME_TYPE_OPTIONS}
         selected={pendingFilters.crimeTypes}
         onToggle={(item) => togglePendingArrayItem("crimeTypes", item)}
-      />
-
-      <MultiSelectDropdown
-        label="Risk Tier"
-        options={RISK_TIER_OPTIONS}
-        selected={pendingFilters.riskTiers}
-        onToggle={(item) => togglePendingArrayItem("riskTiers", item)}
       />
 
       {/* Active filter count badge */}

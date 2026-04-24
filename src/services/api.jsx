@@ -735,11 +735,16 @@ export async function fetchHourlyTrends({ dateFrom, dateTo, districtIds } = {}) 
 /**
  * Fetches the platform-wide crime trend time series.
  */
-export async function fetchPlatformTrend({ dateFrom, dateTo, windowType = "day" } = {}) {
+export async function fetchPlatformTrend({ dateFrom, dateTo, windowType = "day", wardIds, districtIds, beatIds, crimeTypeIds } = {}) {
   try {
     const params = new URLSearchParams({ window_type: windowType });
     if (dateFrom) params.set("date_from", dateFrom);
     if (dateTo) params.set("date_to", dateTo);
+    if (wardIds?.length) params.set("ward_ids", wardIds.join(","));
+    if (districtIds?.length) params.set("district_ids", districtIds.join(","));
+    if (beatIds?.length) params.set("beat_ids", beatIds.join(","));
+    if (crimeTypeIds?.length) params.set("crime_type_ids", crimeTypeIds.join(","));
+
     const res = await fetch(`${DASHBOARD_API_BASE}/trends/platform?${params}`, {
       headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
     });

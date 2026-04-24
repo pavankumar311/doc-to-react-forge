@@ -15,7 +15,7 @@ import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 
 // Pages that should NOT show the global FilterBar
-const PAGES_WITHOUT_FILTERBAR = ["/Summarymaps", "/crimes"];
+const PAGES_WITHOUT_FILTERBAR = ["/Summarymaps", "/crimes", "/chat"];
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();

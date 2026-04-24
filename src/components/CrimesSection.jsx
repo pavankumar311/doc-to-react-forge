@@ -145,6 +145,27 @@ const DASHBOARD_MAP_STYLE = `
     z-index: 1;
     animation: pulse-dot 1.5s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
   }
+  .leaflet-popup-content-wrapper {
+    background: #ffffff !important;
+    color: #1a1a1a !important;
+    border-radius: 10px !important;
+    padding: 0 !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
+    border: 1px solid #e2e8f0 !important;
+  }
+  .leaflet-popup-tip {
+    background: #ffffff !important;
+  }
+  .leaflet-popup-content {
+    color: #1a1a1a !important;
+  }
+  .leaflet-popup-content * {
+    color: #1a1a1a !important;
+  }
+  .forensic-popup .leaflet-popup-content-wrapper {
+    background: #ffffff !important;
+    color: #1a1a1a !important;
+  }
 `;
 
 // ── Components ───────────────────────────────────────────────────────────
@@ -1225,6 +1246,7 @@ export default function CrimesSection() {
                       hourlyData={hourlyData}
                       dowData={dowData}
                       trendData={trendSeries}
+                      filters={filters}
                     />
                   </div>
                 ) : (
@@ -1331,9 +1353,6 @@ export default function CrimesSection() {
 
           {/* Action Buttons — outside and below the panel */}
           <div className="flex items-center justify-end gap-4 shrink-0">
-            <button className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-800 transition-all shadow-sm flex items-center gap-2">
-              <Layers size={14} /> Generate PDF Report
-            </button>
             <button className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-white bg-blue-600 border border-transparent hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-200 transition-all shadow-md shadow-blue-200 flex items-center gap-2">
               <Navigation size={14} /> Launch Strategic Planner
             </button>
@@ -1533,7 +1552,7 @@ function IncidentPopup({ inc, count, clusterIncidents = [] }) {
   );
 }
 
-function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanking = [], wardRanking = [], hourlyData = [], dowData = [], trendData = [] }) {
+function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanking = [], wardRanking = [], hourlyData = [], dowData = [], trendData = [], filters }) {
   const pieData = [
     { name: 'Violent', value: highlights.violent, color: '#ef4444' },
     { name: 'Property', value: highlights.property, color: '#f59e0b' },

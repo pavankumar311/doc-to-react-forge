@@ -833,14 +833,15 @@ function toGeoJSONFeature(boundary) {
 
                   // Popup: Only showing Total for selected window
                   layer.bindPopup(
-                    `<div style="color: white; min-width: 200px; padding: 12px; background: #1a1a1a; border-radius: 8px;">
-                      <h4 style="font-weight: 800; font-size: 14px; margin: 0 0 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; color: #f46d43; text-transform: uppercase; letter-spacing: 0.05em;">${typeLabel} ${b.id}</h4>
-                      <div style="display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; justify-between: space-between; align-items: center;">
-                          <span style="font-size: 10px; color: #9ca3af; text-transform: uppercase; font-weight: 600;">Total incidents</span>
-                          <span style="font-size: 14px; font-weight: 700; margin-left: auto;">${totalCount.toLocaleString()}</span>
+                    `<div style="color: #1a1a1a; min-width: 210px; padding: 14px; background: #ffffff; border-radius: 12px; border: 1px solid #dbeafe; box-shadow: 0 4px 20px rgba(37,99,235,0.12);">
+                      <h4 style="font-weight: 900; font-size: 12px; margin: 0 0 10px 0; border-bottom: 2px solid #dbeafe; padding-bottom: 8px; color: #1d4ed8; text-transform: uppercase; letter-spacing: 0.08em;">${typeLabel} ${b.id}</h4>
+                      <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: #eff6ff; border-radius: 8px; padding: 8px 10px;">
+                          <span style="font-size: 10px; color: #3b82f6; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em;">Total Incidents</span>
+                          <span style="font-size: 18px; font-weight: 900; color: #1e3a8a;">${totalCount.toLocaleString()}</span>
                         </div>
                       </div>
+                      <div style="margin-top: 8px; font-size: 9px; color: #93c5fd; text-align: right; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">GSCIP Intelligence Layer</div>
                     </div>`,
                     { className: "gscip-map-popup", maxWidth: 300 }
                   );
@@ -899,12 +900,12 @@ function toGeoJSONFeature(boundary) {
                 })}
               >
                 <Popup>
-                  <div className="p-1">
-                    <h4 className="font-bold text-[10px] border-b mb-2 pb-1 text-slate-800 uppercase tracking-widest">CPD Precinct Details</h4>
-                    <p className="text-[9px] uppercase font-black"><b>District:</b> {distNum}</p>
-                    <p className="text-[9px] uppercase font-bold text-slate-500"><b>Address:</b> {ps.address || ps.address_text || "N/A"}</p>
-                    <p className="text-[9px] uppercase font-bold text-slate-500"><b>Name:</b> {ps.station_name || ps.name || (distNum !== "N/A" ? `District ${distNum}` : "Unknown Station")}</p>
-                    {ps.phone && <p className="text-[9px] uppercase font-bold text-slate-500"><b>Phone:</b> {ps.phone}</p>}
+                  <div className="p-2" style={{ minWidth: '180px' }}>
+                    <h4 className="font-black text-[10px] border-b border-slate-200 mb-2 pb-1 text-blue-800 uppercase tracking-widest">CPD Precinct Details</h4>
+                    <p className="text-[9px] uppercase font-bold text-slate-800"><b>District:</b> {distNum}</p>
+                    <p className="text-[9px] uppercase font-semibold text-slate-600 mt-1"><b>Address:</b> {ps.address || ps.address_text || 'N/A'}</p>
+                    <p className="text-[9px] uppercase font-semibold text-slate-600 mt-1"><b>Name:</b> {ps.station_name || ps.name || (distNum !== 'N/A' ? `District ${distNum}` : 'Unknown Station')}</p>
+                    {ps.phone && <p className="text-[9px] uppercase font-semibold text-slate-600 mt-1"><b>Phone:</b> {ps.phone}</p>}
                   </div>
                 </Popup>
               </Marker>
@@ -1332,7 +1333,7 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
       const [gs, ct, trends, kpi, baseline, rawIncidents] = await Promise.all([
         fetchGeospatialSummary({ ...q, level }),
         fetchIncidentsByCrimeType(q),
-        fetchPlatformTrend({ dateFrom, dateTo: dt }),
+        fetchPlatformTrend(q),
         fetchSummaryKPIs(q),
         fetchGeospatialSummary({ dateFrom, dateTo: dt, crimeTypeIds: q.crimeTypeIds, level }),
         fetchMapIncidents(q)
@@ -1508,12 +1509,12 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
       <>
         <style>{`
         .custom-tooltip {
-          background: #2d2d2d !important;
-          color: white !important;
-          border: 1px solid rgba(255,255,255,0.1) !important;
-          border-radius: 4px !important;
+          background: #ffffff !important;
+          color: #1a1a1a !important;
+          border: 1px solid #e2e8f0 !important;
+          border-radius: 8px !important;
           padding: 8px 12px !important;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.12) !important;
           font-family: inherit !important;
           opacity: 1 !important;
         }
@@ -1524,13 +1525,21 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
           display: none !important;
         }
         .leaflet-popup-content-wrapper {
-          background: #2d2d2d !important;
-          color: white !important;
-          border-radius: 6px !important;
+          background: #ffffff !important;
+          color: #1a1a1a !important;
+          border-radius: 10px !important;
           padding: 0 !important;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
+          border: 1px solid #e2e8f0 !important;
         }
         .leaflet-popup-tip {
-          background: #2d2d2d !important;
+          background: #ffffff !important;
+        }
+        .leaflet-popup-content {
+          color: #1a1a1a !important;
+        }
+        .leaflet-popup-content * {
+          color: #1a1a1a !important;
         }
       `}</style>
 

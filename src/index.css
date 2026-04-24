@@ -103,3 +103,32 @@
 .font-mono {
   font-family: 'IBM Plex Mono', monospace !important;
 }
+
+/* ── Global Leaflet map popup overrides ─────────────────────── */
+/* Force all map popups to use light theme (white bg, dark text) */
+.leaflet-popup-content-wrapper {
+  background: #ffffff !important;
+  color: #1a2332 !important;
+  border-radius: 10px !important;
+  padding: 0 !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+  border: 1px solid #e2e6eb !important;
+}
+.leaflet-popup-tip-container .leaflet-popup-tip,
+.leaflet-popup-tip {
+  background: #ffffff !important;
+}
+.leaflet-popup-content {
+  color: #1a2332 !important;
+  margin: 0 !important;
+}
+.leaflet-popup-content p,
+.leaflet-popup-content span,
+.leaflet-popup-content div,
+.leaflet-popup-content h4,
+.leaflet-popup-content b {
+  color: #1a2332 !important;
+}
+.leaflet-container a.leaflet-popup-close-button {
+  color: #6b7280 !important;
+}
