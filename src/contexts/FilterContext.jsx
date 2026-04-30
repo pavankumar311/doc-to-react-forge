@@ -217,8 +217,11 @@ export function FilterProvider({ children }) {
     const loadOptions = async () => {
       try {
         const res = await fetch("/api/v1/dashboard/filters", {
+          cache: "no-store",
           headers: {
             Authorization: `Bearer ${AUTH_TOKEN}`, // adjust if needed
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
           },
         });
 

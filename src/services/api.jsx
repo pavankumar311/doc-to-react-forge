@@ -706,7 +706,12 @@ export async function fetchIncidentsByCrimeType({ dateFrom, dateTo, wardIds, dis
  */
 export async function fetchFilterOptions() {
   const res = await fetch(`${DASHBOARD_API_BASE}/filters`, {
-    headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+    cache: "no-store",
+    headers: {
+      Authorization: `Bearer ${AUTH_TOKEN}`,
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    },
   });
   if (!res.ok) throw new Error("Filters fetch failed");
   return await res.json();

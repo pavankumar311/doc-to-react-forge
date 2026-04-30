@@ -9,6 +9,7 @@ import {
   ChevronDown, MapPin, Navigation, Clock, Play, Pause, RotateCcw
 } from "lucide-react";
 import { Slider } from "./ui/slider";
+import { parseIsoDateToUtc, shiftIsoDateStringUtc, toIsoDateStringUtc } from "../utils/isoDate";
 import {
   fetchSummaryKPIs,
   fetchMapIncidents,
@@ -36,12 +37,12 @@ import {
 
 // ── Constants & Helpers ──────────────────────────────────────────────────
 function timeFrameToDates(range, now) {
-  const to = new Date(now);
-  let from = new Date(now);
-  if (range === "Last 7 Days") from.setDate(now.getDate() - 7);
-  else if (range === "Last 30 Days") from.setDate(now.getDate() - 30);
-  else if (range === "Last 90 Days") from.setDate(now.getDate() - 90);
-  return { dateFrom: from.toISOString().split("T")[0], dateTo: to.toISOString().split("T")[0] };
+  const anchor = now ?? new Date();
+  const dateTo = toIsoDateStringUtc(anchor) || toIsoDateStringUtc(new Date());
+  const delta =
+    range === "Last 7 Days" ? -7 : range === "Last 30 Days" ? -30 : range === "Last 90 Days" ? -90 : -7;
+  const dateFrom = shiftIsoDateStringUtc(dateTo, delta) || dateTo;
+  return { dateFrom, dateTo };
 }
 
 function downloadCSV(data, filename) {
@@ -431,7 +432,8 @@ export default function CrimesSection() {
       try {
         const meta = await fetchFilterOptions();
         if (meta?.date_range?.max_date) {
-          setDbMaxDate(new Date(meta.date_range.max_date));
+          const parsed = parseIsoDateToUtc(meta.date_range.max_date);
+          if (parsed) setDbMaxDate(parsed);
         }
       } catch (e) {
         console.warn("CrimesSection: Calendar sync failed:", e);
@@ -922,7 +924,7 @@ export default function CrimesSection() {
                   <h3 className="text-xl font-bold tracking-tight text-slate-800">Forensic Map View</h3>
                   <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-400 uppercase tracking-widest">
                     <Clock size={10} className="text-blue-500" />
-                    <span>Anchored to latest record: <span className="text-blue-600 underline decoration-blue-200">{dbMaxDate.toISOString().split("T")[0]}</span></span>
+                    <span>Anchored to latest record: <span className="text-blue-600 underline decoration-blue-200">{toIsoDateStringUtc(dbMaxDate)}</span></span>
                   </div>
                 </div>
               </div>

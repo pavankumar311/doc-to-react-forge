@@ -7,6 +7,7 @@ import { CircleMarker, MapContainer, Marker, TileLayer, Tooltip, useMap } from "
 import { HeatmapSkeleton } from "../components/Skeletons";
 import { useFilters } from "../contexts/FilterContext";
 import { AUTH_TOKEN } from "../services/api";
+import { shiftIsoDateStringUtc, toIsoDateStringUtc } from "../utils/isoDate";
 
 // UI Components
 import { Calendar } from "../components/ui/calendar";
@@ -66,23 +67,12 @@ function DateInput({ label, value, onChange }) {
   );
 }
 
-const formatDateStr = (value) => {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-};
-
 const buildPresetRange = (presetDays, maxDate) => {
-  const end = maxDate ? new Date(maxDate) : new Date();
-  const start = new Date(end);
-  start.setDate(start.getDate() - presetDays);
+  const endIso = maxDate ? toIsoDateStringUtc(maxDate) : toIsoDateStringUtc(new Date());
+  const startIso = shiftIsoDateStringUtc(endIso, -presetDays) || endIso;
   return {
-    from: formatDateStr(start),
-    to: formatDateStr(end),
+    from: startIso,
+    to: endIso,
   };
 };
 
@@ -212,10 +202,20 @@ export default function Heatmap() {
       try {
         const [districtsRes, filtersRes] = await Promise.all([
           fetch(`${BASE_URL}/api/v1/dashboard/districts?include_boundary=true`, {
-            headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+            cache: "no-store",
+            headers: {
+              Authorization: `Bearer ${AUTH_TOKEN}`,
+              "Cache-Control": "no-cache",
+              Pragma: "no-cache",
+            },
           }),
           fetch(`${BASE_URL}/api/v1/dashboard/filters`, {
-            headers: { Authorization: `Bearer ${AUTH_TOKEN}` },
+            cache: "no-store",
+            headers: {
+              Authorization: `Bearer ${AUTH_TOKEN}`,
+              "Cache-Control": "no-cache",
+              Pragma: "no-cache",
+            },
           })
         ]);
 

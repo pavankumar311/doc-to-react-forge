@@ -8,6 +8,7 @@ import { Slider } from "./ui/slider";
 import CrimesSectionView from "./CrimesSection";
 import { MapContainer, TileLayer, GeoJSON, CircleMarker, Popup, useMap, Marker } from "react-leaflet";
 import L from "leaflet";
+import { parseIsoDateToUtc, shiftIsoDateStringUtc, toIsoDateStringUtc } from "../utils/isoDate";
 import {
   AUTH_TOKEN,
   fetchGeospatialSummary,
@@ -81,19 +82,20 @@ function timeFrameToDates(tf, anchorDate, customRange = null) {
 
   if (timeframe === "custom range" && customRange) {
     return {
-      dateFrom: customRange.dateFrom || new Date().toISOString().split("T")[0],
-      dateTo: customRange.dateTo || new Date().toISOString().split("T")[0]
+      dateFrom: customRange.dateFrom || toIsoDateStringUtc(new Date()),
+      dateTo: customRange.dateTo || toIsoDateStringUtc(new Date()),
     };
   }
 
-  let baseDate = anchorDate instanceof Date && !isNaN(anchorDate) ? anchorDate : new Date();
+  const parsedAnchor = parseIsoDateToUtc(anchorDate);
+  const baseDate = parsedAnchor ?? new Date();
   let intervalDays = 30;
   if (timeframe.includes("7 day")) intervalDays = 7;
   else if (timeframe.includes("90 day")) intervalDays = 90;
   else if (timeframe.includes("365 day")) intervalDays = 365;
 
-  const dateTo = baseDate.toISOString().split("T")[0];
-  const dateFrom = new Date(baseDate.getTime() - intervalDays * 86400000).toISOString().split("T")[0];
+  const dateTo = toIsoDateStringUtc(baseDate);
+  const dateFrom = shiftIsoDateStringUtc(dateTo, -intervalDays) || dateTo;
 
   return { dateFrom, dateTo };
 }
@@ -1180,16 +1182,18 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
         console.log("SummarySection: Syncing with forensic calendar...");
         const meta = await fetchFilterOptions();
         if (meta?.date_range?.max_date) {
-          const syncedDate = new Date(meta.date_range.max_date);
-          console.log("SummarySection: Calendar anchored to:", syncedDate.toISOString().split("T")[0]);
+          const syncedDate = parseIsoDateToUtc(meta.date_range.max_date);
+          if (!syncedDate) return;
+          console.log("SummarySection: Calendar anchored to:", toIsoDateStringUtc(syncedDate));
           setDbMaxDate(syncedDate);
 
           // Force applied filters to sync with the new max date baseline
+          const syncedTo = toIsoDateStringUtc(syncedDate);
           setAppliedFilters(prev => ({
             ...prev,
             customRange: {
-              dateFrom: new Date(syncedDate.getTime() - 30 * 86400000).toISOString().split("T")[0],
-              dateTo: syncedDate.toISOString().split("T")[0]
+              dateFrom: shiftIsoDateStringUtc(syncedTo, -30) || syncedTo,
+              dateTo: syncedTo,
             }
           }));
         }
@@ -1706,4 +1710,3 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
     );
   }
 }
-
