@@ -630,9 +630,9 @@ function toGeoJSONFeature(boundary) {
 
 // ── MapPanel ────────────────────────────────────────────────────────────
 
- function MapPanel({
-  activeTab, countsMap, kpiData, bins, selectedIds, 
-  showPolice, policeStations, 
+function MapPanel({
+  activeTab, countsMap, kpiData, bins, selectedIds,
+  showPolice, policeStations,
   showHospitals, hospitalLocations,
   showSchools, schoolLocations,
   showFireStations, fireStationLocations,
@@ -1133,7 +1133,7 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
   const [allIncidents, setAllIncidents] = useState([]);
 
   const [appliedFilters, setAppliedFilters] = useState({
-    timeFrame: "Last 7 Days",
+    timeFrame: "Last 30 Days",
     customRange: {
       dateFrom: new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0],
       dateTo: new Date().toISOString().split("T")[0]
@@ -1577,7 +1577,7 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
                 setSelectedCrimes([]);
                 setAppliedFilters(prev => ({ ...prev, selectedCrimes: [] }));
               }}
-               showPolice={showPolice}
+              showPolice={showPolice}
               onTogglePolice={() => setShowPolice(!showPolice)}
               showHospitals={showHospitals}
               onToggleHospitals={() => setShowHospitals(!showHospitals)}
@@ -1674,7 +1674,7 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
               kpiData={{ ...(kpiData || {}), total_incidents: calculatedTotalCount }}
               bins={choroplethBins || []}
               selectedIds={currentSelectedIds || []}
-               showPolice={showPolice}
+              showPolice={showPolice}
               policeStations={policeStations}
               showHospitals={showHospitals}
               hospitalLocations={hospitalLocations}
