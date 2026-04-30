@@ -5,7 +5,7 @@ import { ReportsSkeleton } from "../components/Skeletons";
 import { downloadReport, fetchReports, fetchReportStatus, generateReport } from "../services/api";
 import { useFilters } from "../contexts/FilterContext";
 
-const reportTypes = ["Crime Risk PDF", "Weekly Summary", "District Compare", "CSV Export"];
+const reportTypes = ["Crime Risk PDF", "Weekly Summary", "District Compare"];
 
 export default function ReportsPage() {
   const { filters, DISTRICT_OPTIONS, CRIME_TYPE_OPTIONS, districtIdByName, crimeTypeIdByName } = useFilters();
@@ -13,9 +13,8 @@ export default function ReportsPage() {
   const [generating, setGenerating] = useState(false);
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDistrict, setSelectedDistrict] = useState("");
   const [selectedDistricts, setSelectedDistricts] = useState([]);
-  const [selectedCrimeType, setSelectedCrimeType] = useState("");
+  const [selectedCrimeTypes, setSelectedCrimeTypes] = useState([]);
   const reportsRef = useRef(reports);
 
   const dateRangeLabel = useMemo(() => {
@@ -48,17 +47,15 @@ export default function ReportsPage() {
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      const districtIds = selectedType === "District Compare"
-        ? selectedDistricts.map((d) => toDistrictId(d)).filter(Boolean)
-        : (selectedDistrict ? [toDistrictId(selectedDistrict)] : []);
-      const crimeTypeId = selectedCrimeType ? selectedCrimeType : null;
+      const districtIds = selectedDistricts.map((d) => toDistrictId(d)).filter(Boolean);
+      const crimeTypeIds = selectedCrimeTypes.map((c) => crimeTypeIdByName?.[c] || normalizeCrimeTypeId(c)).filter(Boolean);
 
       const payload = {
         type: selectedType,
         date_from: filters?.dateFrom,
         date_to: filters?.dateTo,
         district_ids: districtIds,
-        crime_type_ids: crimeTypeId ? [crimeTypeId] : [],
+        crime_type_ids: crimeTypeIds,
       };
 
       await generateReport(payload);
@@ -132,44 +129,38 @@ export default function ReportsPage() {
           <GscipCard title="Parameters" className="mt-4">
             <div className="space-y-3">
               <div>
-                <label className="text-[11px] uppercase font-semibold block mb-1" style={{ color: "var(--color-text-muted)" }}>District</label>
-                {selectedType === "District Compare" ? (
-                  <div className="max-h-40 overflow-y-auto rounded p-2 space-y-1" style={{ background: "var(--color-bg-sidebar)", border: "1px solid var(--color-border)" }}>
-                    {DISTRICT_OPTIONS.map((d) => {
-                      const active = selectedDistricts.includes(d);
-                      return (
-                        <button
-                          key={d}
-                          type="button"
-                          onClick={() => setSelectedDistricts((prev) => active ? prev.filter((x) => x !== d) : [...prev, d])}
-                          className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-left"
-                          style={{
-                            color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)",
-                            background: active ? "rgba(21,101,192,0.15)" : "transparent",
-                          }}
-                        >
-                          <span className="inline-block w-2.5 h-2.5 rounded-full border" style={{
-                            borderColor: active ? "var(--color-cobalt)" : "var(--color-border)",
-                            background: active ? "var(--color-cobalt)" : "transparent",
-                          }} />
-                          {d}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <select
-                    value={selectedDistrict}
-                    onChange={(e) => setSelectedDistrict(e.target.value)}
-                    className="w-full h-8 px-2 rounded text-xs"
-                    style={{ background: "var(--color-bg-sidebar)", color: "var(--color-text-primary)", border: "1px solid var(--color-border)" }}
+                <label className="text-[11px] uppercase font-semibold block mb-1" style={{ color: "var(--color-text-muted)" }}>Districts</label>
+                <div className="max-h-40 overflow-y-auto rounded p-2 space-y-1" style={{ background: "var(--color-bg-sidebar)", border: "1px solid var(--color-border)" }}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDistricts(selectedDistricts.length === DISTRICT_OPTIONS.length ? [] : [...DISTRICT_OPTIONS])}
+                    className="w-full flex items-center gap-2 px-2 py-1 rounded text-[10px] font-bold uppercase mb-1"
+                    style={{ color: "var(--color-cobalt)", borderBottom: "1px solid var(--color-border)" }}
                   >
-                    <option value="">All</option>
-                    {DISTRICT_OPTIONS.map((d) => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                )}
+                    {selectedDistricts.length === DISTRICT_OPTIONS.length ? "Deselect All" : "Select All"}
+                  </button>
+                  {DISTRICT_OPTIONS.map((d) => {
+                    const active = selectedDistricts.includes(d);
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setSelectedDistricts((prev) => active ? prev.filter((x) => x !== d) : [...prev, d])}
+                        className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-left"
+                        style={{
+                          color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                          background: active ? "rgba(21,101,192,0.15)" : "transparent",
+                        }}
+                      >
+                        <span className="inline-block w-2.5 h-2.5 rounded-full border" style={{
+                          borderColor: active ? "var(--color-cobalt)" : "var(--color-border)",
+                          background: active ? "var(--color-cobalt)" : "transparent",
+                        }} />
+                        {d}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div>
                 <label className="text-[11px] uppercase font-semibold block mb-1" style={{ color: "var(--color-text-muted)" }}>Date Range</label>
@@ -178,18 +169,38 @@ export default function ReportsPage() {
                 </div>
               </div>
               <div>
-                <label className="text-[11px] uppercase font-semibold block mb-1" style={{ color: "var(--color-text-muted)" }}>Crime Type</label>
-                <select
-                  value={selectedCrimeType}
-                  onChange={(e) => setSelectedCrimeType(e.target.value)}
-                  className="w-full h-8 px-2 rounded text-xs"
-                  style={{ background: "var(--color-bg-sidebar)", color: "var(--color-text-primary)", border: "1px solid var(--color-border)" }}
-                >
-                  <option value="">All</option>
-                  {CRIME_TYPE_OPTIONS.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                <label className="text-[11px] uppercase font-semibold block mb-1" style={{ color: "var(--color-text-muted)" }}>Crime Types</label>
+                <div className="max-h-40 overflow-y-auto rounded p-2 space-y-1" style={{ background: "var(--color-bg-sidebar)", border: "1px solid var(--color-border)" }}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCrimeTypes(selectedCrimeTypes.length === CRIME_TYPE_OPTIONS.length ? [] : [...CRIME_TYPE_OPTIONS])}
+                    className="w-full flex items-center gap-2 px-2 py-1 rounded text-[10px] font-bold uppercase mb-1"
+                    style={{ color: "var(--color-cobalt)", borderBottom: "1px solid var(--color-border)" }}
+                  >
+                    {selectedCrimeTypes.length === CRIME_TYPE_OPTIONS.length ? "Deselect All" : "Select All"}
+                  </button>
+                  {CRIME_TYPE_OPTIONS.map((c) => {
+                    const active = selectedCrimeTypes.includes(c);
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setSelectedCrimeTypes((prev) => active ? prev.filter((x) => x !== c) : [...prev, c])}
+                        className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-left"
+                        style={{
+                          color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+                          background: active ? "rgba(21,101,192,0.15)" : "transparent",
+                        }}
+                      >
+                        <span className="inline-block w-2.5 h-2.5 rounded-full border" style={{
+                          borderColor: active ? "var(--color-cobalt)" : "var(--color-border)",
+                          background: active ? "var(--color-cobalt)" : "transparent",
+                        }} />
+                        {c}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <button onClick={handleGenerate} disabled={generating} className="w-full h-9 rounded text-xs font-semibold" style={{
                 background: generating ? "var(--color-text-muted)" : "var(--color-cobalt)",
@@ -237,7 +248,7 @@ export default function ReportsPage() {
                         disabled={r.status !== "complete"}
                         onClick={() => downloadReport(r.report_id || r.id)}
                       >
-                        <Download size={12} /> Download CSV
+                        <Download size={12} /> Download Report
                       </button>
                       <button className="h-8 px-3 rounded text-xs font-medium flex items-center gap-1" style={{ color: "var(--color-text-secondary)", border: "1px solid var(--color-border)" }}>
                         <Share2 size={12} />

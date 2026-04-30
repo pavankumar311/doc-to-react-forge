@@ -5,14 +5,14 @@ import { AUTH_TOKEN } from "../services/api";
 const FilterContext = createContext(null);
 
 const defaultFilters = {
-  dateFrom: "2025-02-01",
-  dateTo: "2025-02-27",
+  dateFrom: "2025-12-01",
+  dateTo: "2026-01-01",
   districts: [],
   crimeTypes: [],
   riskTiers: [],
 };
 
-const DEFAULT_DISTRICT_OPTIONS = ["District 7", "District 8", "District 11", "District 14"];
+const DEFAULT_DISTRICT_OPTIONS = Array.from({ length: 25 }, (_, i) => `District ${String(i + 1).padStart(2, "0")}`);
 const DEFAULT_CRIME_TYPE_OPTIONS = ["Theft", "Assault", "Burglary", "Battery", "Robbery"];
 const DEFAULT_RISK_TIER_OPTIONS = ["HIGH", "MED", "LOW"];
 const SUMMARY_ENDPOINT = "/api/v1/dashboard/summary";
@@ -228,17 +228,15 @@ export function FilterProvider({ children }) {
         const districtMap = {};
         const crimeTypeMap = {};
 
-        const districts =
-          data?.districts && data.districts.length > 0
-            ? data.districts
-                .map((d) => {
-                  const name = d?.district_name;
-                  const id = d?.district_id ?? d?.id;
-                  if (name && id != null) districtMap[name] = normalizeDistrictId(id);
-                  return name;
-                })
-                .filter(Boolean)
-            : DEFAULT_DISTRICT_OPTIONS;
+        const districtsFromApi = (data?.districts || []).map((d) => {
+          const name = d?.district_name || `District ${String(d?.district_id || d?.id).padStart(2, '0')}`;
+          const id = d?.district_id ?? d?.id;
+          if (name && id != null) districtMap[name] = normalizeDistrictId(id);
+          return name;
+        }).filter(Boolean);
+
+        // Merge API districts with DEFAULT_DISTRICT_OPTIONS to ensure all 25 are always visible
+        const districts = Array.from(new Set([...DEFAULT_DISTRICT_OPTIONS, ...districtsFromApi])).sort();
 
         const crimeTypes =
           data?.crime_types && data.crime_types.length > 0

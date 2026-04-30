@@ -18,7 +18,12 @@ export default function TrendsPage() {
   const [rollingTrend, setRollingTrend] = useState({ avg_7d: 0, avg_30d: 0, trend_slope: 0, series: [] });
   const [crimeTypes, setCrimeTypes] = useState([]);
   const [trendLoading, setTrendLoading] = useState(true);
-  const { filters, districtIdByName, crimeTypeIdByName } = useFilters();
+  const { filters, districtIdByName, crimeTypeIdByName, updatePending, applyFilters } = useFilters();
+
+  const handleDistrictClick = (districtName) => {
+    updatePending("districts", [districtName]);
+    applyFilters();
+  };
 
   const windowType = granularity === "Daily" ? "day" : granularity === "Weekly" ? "week" : "month";
   const lineColors = ["#1E88E5", "#F57C00", "#2E7D32", "#8E24AA", "#00897B", "#C62828"];
@@ -100,11 +105,26 @@ export default function TrendsPage() {
             <XAxis dataKey="label" stroke="#4A5880" fontSize={11} fontFamily="IBM Plex Mono" />
             <YAxis stroke="#4A5880" fontSize={11} fontFamily="IBM Plex Mono" />
             <Tooltip
-              contentStyle={chartTooltipStyle}
-              shared={true}
-              formatter={(value, name, entry) => {
-                if (hoveredLine && entry.dataKey !== hoveredLine) return [null, null];
-                return [value, name];
+              content={({ active, payload, label }) => {
+                if (active && payload && payload.length) {
+                  const filtered = hoveredLine 
+                    ? payload.filter(p => p.dataKey === hoveredLine)
+                    : payload;
+                  if (filtered.length === 0) return null;
+                  return (
+                    <div style={{ ...chartTooltipStyle, padding: '8px 12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.3)' }}>
+                      <p style={{ fontWeight: 900, fontSize: 10, color: '#4A5880', marginBottom: 4, textTransform: 'uppercase' }}>{label}</p>
+                      {filtered.map((p, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: p.color }} />
+                          <span style={{ fontWeight: 600 }}>{p.name}:</span>
+                          <span style={{ fontWeight: 900, color: '#60A5FA' }}>{p.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+                return null;
               }}
             />
             <Legend
@@ -119,12 +139,14 @@ export default function TrendsPage() {
                 dataKey={district.key}
                 name={district.name}
                 stroke={lineColors[index % lineColors.length]}
-                strokeWidth={hoveredLine === district.key ? 3 : 2}
-                strokeOpacity={hoveredLine === null || hoveredLine === district.key ? 1 : 0.25}
+                strokeWidth={hoveredLine === district.key ? 4 : 2}
+                strokeOpacity={hoveredLine === null || hoveredLine === district.key ? 1 : 0.15}
                 dot={false}
                 activeDot={{ r: 6, strokeWidth: 0 }}
                 onMouseEnter={() => setHoveredLine(district.key)}
                 onMouseLeave={() => setHoveredLine(null)}
+                onClick={() => handleDistrictClick(district.name)}
+                style={{ cursor: 'pointer' }}
               />
             ))}
           </LineChart>

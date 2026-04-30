@@ -841,7 +841,6 @@ function toGeoJSONFeature(boundary) {
                           <span style="font-size: 18px; font-weight: 900; color: #1e3a8a;">${totalCount.toLocaleString()}</span>
                         </div>
                       </div>
-                      <div style="margin-top: 8px; font-size: 9px; color: #93c5fd; text-align: right; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">GSCIP Intelligence Layer</div>
                     </div>`,
                     { className: "gscip-map-popup", maxWidth: 300 }
                   );
@@ -1108,7 +1107,7 @@ function toGeoJSONFeature(boundary) {
 // ── Summary Dashboard Main Component ──────────────────────────────────
 
 export default function SummarySection({ activeTab = "Police Districts" }) {
-  const [timeFrame, setTimeFrame] = useState("Last 30 Days");
+  const [timeFrame, setTimeFrame] = useState("Last 7 Days");
   const [customRange, setCustomRange] = useState({
     dateFrom: new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0],
     dateTo: new Date().toISOString().split("T")[0]
@@ -1134,7 +1133,7 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
   const [allIncidents, setAllIncidents] = useState([]);
 
   const [appliedFilters, setAppliedFilters] = useState({
-    timeFrame: "Last 30 Days",
+    timeFrame: "Last 7 Days",
     customRange: {
       dateFrom: new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0],
       dateTo: new Date().toISOString().split("T")[0]

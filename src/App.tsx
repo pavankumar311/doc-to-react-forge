@@ -47,13 +47,13 @@ function AppRoutes() {
             {showFilterBar && <FilterBar />}
             <main className="p-6">
               <Routes>
-                <Route path="/" element={<Dashboard />} />
+                <Route path="/" element={<Navigate to="/Summarymaps" replace />} />
                 <Route path="/Summarymaps" element={<SummaryMapsPage />} />
                 <Route path="/crimes" element={<CrimesPage />} />
                 <Route path="/trends" element={<TrendsPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/chat" element={<ChatPage />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<Navigate to="/Summarymaps" replace />} />
               </Routes>
             </main>
           </div>

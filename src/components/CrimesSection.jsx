@@ -38,7 +38,8 @@ import {
 function timeFrameToDates(range, now) {
   const to = new Date(now);
   let from = new Date(now);
-  if (range === "Last 30 Days") from.setDate(now.getDate() - 30);
+  if (range === "Last 7 Days") from.setDate(now.getDate() - 7);
+  else if (range === "Last 30 Days") from.setDate(now.getDate() - 30);
   else if (range === "Last 90 Days") from.setDate(now.getDate() - 90);
   return { dateFrom: from.toISOString().split("T")[0], dateTo: to.toISOString().split("T")[0] };
 }
@@ -292,7 +293,7 @@ export default function CrimesSection() {
     district: "All", beat: "All", ward: "All", community: "All", crimeType: "All",
     crimeToggles: { violent: true, property: true, other: true },
     layers: { ward: true, district: true, beat: true },
-    dateRange: "Last 30 Days",
+    dateRange: "Last 7 Days",
     customFrom: "",
     customTo: ""
   });
@@ -563,11 +564,11 @@ export default function CrimesSection() {
 
       setKpis({ total: summary.total_incidents || 0, violent: v, property: p, other: o });
       setCrimeTypeData(types);
-      
+
       // Sort and slice rankings to ensure forensic focus
       const sortedBeats = (beatSummary.items || []).sort((a, b) => (b.crime_count || 0) - (a.crime_count || 0));
       const sortedWards = (wardSummary.items || []).sort((a, b) => (b.crime_count || 0) - (a.crime_count || 0));
-      
+
       setBeatRanking(sortedBeats.slice(0, 10));
       setWardRanking(sortedWards.slice(0, 10));
       setTrendSeries(platformTrend);
@@ -698,7 +699,7 @@ export default function CrimesSection() {
 
                 <div className="space-y-2">
                   <div className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-1">Date Range</div>
-                  {["Last 30 Days", "Last 90 Days"].map(d => (
+                  {["Last 7 Days", "Last 30 Days", "Last 90 Days"].map(d => (
                     <label key={d} className="flex items-center gap-3 cursor-pointer group">
                       <div
                         onClick={() => setFilters({ ...filters, dateRange: d, customFrom: "", customTo: "" })}
@@ -1583,14 +1584,14 @@ function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanki
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={barData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="name" 
-                  fontSize={8} 
-                  fontWeight="bold" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  angle={-30} 
-                  textAnchor="end" 
+                <XAxis
+                  dataKey="name"
+                  fontSize={8}
+                  fontWeight="bold"
+                  axisLine={false}
+                  tickLine={false}
+                  angle={-30}
+                  textAnchor="end"
                   interval={0}
                   height={50}
                   tickFormatter={(v) => v.length > 10 ? v.substring(0, 9) + '..' : v}
