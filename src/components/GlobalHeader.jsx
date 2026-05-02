@@ -1,4 +1,5 @@
 import { useAuth } from "../contexts/AuthContext";
+import { useFilters } from "../contexts/FilterContext";
 import { Bell, ChevronDown, LogOut, Settings, User } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -6,6 +7,7 @@ import { alerts } from "../services/mockData";
 
 export default function GlobalHeader() {
   const { user, logout } = useAuth();
+  const { forensicDate } = useFilters();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const navigate = useNavigate();
@@ -23,6 +25,18 @@ export default function GlobalHeader() {
       <div className="flex items-center gap-3">
         <div className="w-7 h-7 rounded bg-gscip-cobalt flex items-center justify-center font-bold text-sm text-white">G</div>
         <span className="font-semibold text-base tracking-wide" style={{ color: "var(--color-text-primary)" }}>GSCIP</span>
+      </div>
+
+      <div className="hidden lg:flex flex-1 justify-center items-center">
+        <div className="px-5 py-1.5 rounded-full border border-gscip-cobalt/20 bg-gscip-cobalt/5 flex items-center gap-2.5 shadow-sm">
+          <span className="flex h-2 w-2 relative">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gscip-cobalt opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-gscip-cobalt"></span>
+          </span>
+          <span className="text-sm font-semibold tracking-wide text-gscip-cobalt">
+            Data available until: {forensicDate}
+          </span>
+        </div>
       </div>
 
       <div className="flex items-center gap-2">

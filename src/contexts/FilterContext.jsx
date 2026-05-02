@@ -158,6 +158,7 @@ export function FilterProvider({ children }) {
   const [crimeTypeIdByName, setCrimeTypeIdByName] = useState({});
   const [summaryData, setSummaryData] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [forensicDate, setForensicDate] = useState("2026-04-20");
 
   const hasChanges = useMemo(
     () => JSON.stringify(pendingFilters) !== JSON.stringify(filters),
@@ -336,6 +337,8 @@ export function FilterProvider({ children }) {
         RISK_TIER_OPTIONS: riskTierOptions,
         districtIdByName,
         crimeTypeIdByName,
+        forensicDate,
+        setForensicDate,
       }}
     >
       {children}

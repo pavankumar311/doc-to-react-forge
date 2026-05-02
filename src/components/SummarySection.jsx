@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useFilters } from "../contexts/FilterContext";
 // Forced HMR Refresh - v2
 
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from "recharts";
@@ -89,7 +90,7 @@ function timeFrameToDates(tf, anchorDate, customRange = null) {
 
   const parsedAnchor = parseIsoDateToUtc(anchorDate);
   const baseDate = parsedAnchor ?? new Date();
-  let intervalDays = 30;
+  let intervalDays = 7;
   if (timeframe.includes("7 day")) intervalDays = 7;
   else if (timeframe.includes("90 day")) intervalDays = 90;
   else if (timeframe.includes("365 day")) intervalDays = 365;
@@ -1109,9 +1110,10 @@ function MapPanel({
 // ── Summary Dashboard Main Component ──────────────────────────────────
 
 export default function SummarySection({ activeTab = "Police Districts" }) {
+  const { setForensicDate } = useFilters();
   const [timeFrame, setTimeFrame] = useState("Last 7 Days");
   const [customRange, setCustomRange] = useState({
-    dateFrom: new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0],
+    dateFrom: new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0],
     dateTo: new Date().toISOString().split("T")[0]
   });
   const [selectedCrimes, setSelectedCrimes] = useState([]);   // crime type names
@@ -1135,9 +1137,9 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
   const [allIncidents, setAllIncidents] = useState([]);
 
   const [appliedFilters, setAppliedFilters] = useState({
-    timeFrame: "Last 30 Days",
+    timeFrame: "Last 7 Days",
     customRange: {
-      dateFrom: new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0],
+      dateFrom: new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0],
       dateTo: new Date().toISOString().split("T")[0]
     },
     selectedCrimes: [],
@@ -1163,6 +1165,10 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
     if (!allIncidents.length) return [];
     return allIncidents.filter(inc => inc.date && inc.date.split("T")[0] <= scrubbedDateTo);
   }, [allIncidents, scrubbedDateTo]);
+
+  useEffect(() => {
+    setForensicDate(scrubbedDateTo);
+  }, [scrubbedDateTo, setForensicDate]);
 
   // Playback timer
   useEffect(() => {
@@ -1192,7 +1198,7 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
           setAppliedFilters(prev => ({
             ...prev,
             customRange: {
-              dateFrom: shiftIsoDateStringUtc(syncedTo, -30) || syncedTo,
+              dateFrom: shiftIsoDateStringUtc(syncedTo, -7) || syncedTo,
               dateTo: syncedTo,
             }
           }));
@@ -1249,12 +1255,12 @@ export default function SummarySection({ activeTab = "Police Districts" }) {
       setSelectedWards([]);
       setSelectedBeats([]);
       setSelectedCrimes([]);
-      setTimeFrame("Last 30 Days");
+      setTimeFrame("Last 7 Days");
 
       setAppliedFilters({
-        timeFrame: "Last 30 Days",
+        timeFrame: "Last 7 Days",
         customRange: {
-          dateFrom: new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0],
+          dateFrom: new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0],
           dateTo: new Date().toISOString().split("T")[0]
         },
         selectedCrimes: [],

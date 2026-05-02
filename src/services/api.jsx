@@ -38,7 +38,7 @@ const DASHBOARD_API_BASE = "/api/v1/dashboard";
 const REPORTS_API_BASE = "/api/v1/reports";
 const CHAT_API_BASE = "/api/v1/chat";
 export const AUTH_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NzU0OTEzMywgImV4cCI6IDE3Nzc2MzU1MzN9.JU28FAFE95iJWRU47cGqBOApxP2yXm5zJAUFXBroP7A";
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiAidGVzdHVzZXIiLCAicm9sZXMiOiBbIkFkbWluIl0sICJkaXN0cmljdF9zY29wZSI6IFtdLCAiaWF0IjogMTc3NzcwMTkyOSwgImV4cCI6IDE3Nzc3ODgzMjl9.RrmZGj9eGc8h4459BotficBVjG3qrz5Rnc9Zzn6RIoo";
 
 function normalizeDistrictId(value) {
   if (value == null) return "";

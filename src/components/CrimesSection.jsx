@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import { useFilters } from "../contexts/FilterContext";
 // Forced HMR Refresh - v2
 
 import { MapContainer, TileLayer, GeoJSON, Popup, useMap, Marker, useMapEvents, Circle } from "react-leaflet";
@@ -281,6 +282,7 @@ function IncidentListItemWide({ inc, active, onClick }) {
 // ── Main Page Logic ──────────────────────────────────────────────────────
 
 export default function CrimesSection() {
+  const { setForensicDate } = useFilters();
   const [activeTab, setActiveTab] = useState("Map Area Crime");
   const [zoom, setZoom] = useState(11);
   const [addressSearch, setAddressSearch] = useState("");
@@ -347,6 +349,10 @@ export default function CrimesSection() {
     const scrubbed = new Date(from.getTime() + currentDays * 86400000);
     return scrubbed.toISOString().split("T")[0];
   }, [filters.dateRange, scrubValue, dbMaxDate]);
+
+  useEffect(() => {
+    setForensicDate(scrubbedDateTo);
+  }, [scrubbedDateTo, setForensicDate]);
 
   // Playback timer
   useEffect(() => {
@@ -1151,7 +1157,7 @@ export default function CrimesSection() {
 
               {/* Large KPI row */}
               <div className="px-5 pt-5 pb-4 border-b border-slate-100 shrink-0">
-                <div className="grid grid-cols-3 gap-0">
+                <div className="grid grid-cols-2 gap-0">
                   <KPIBox label="Total Crime" val={kpis?.total} colorClass="text-blue-900" />
                   <KPIBox label="Violent Crime" val={kpis?.violent} colorClass="text-red-500" />
                   <KPIBox label="Property Crime" val={kpis?.property} colorClass="text-amber-500" />
@@ -1571,7 +1577,7 @@ function CrimeDashboard({ data, highlights, districtName = "Citywide", beatRanki
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-2 gap-6">
         {/* Row 1 */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[280px]">
           <div className="flex items-center justify-between mb-6 border-b border-slate-50 pb-2">
